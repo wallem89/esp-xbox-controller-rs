@@ -1,0 +1,45 @@
+[workspace]
+resolver = "2"
+members = [
+    ".",
+    "examples/esp32-c3-example",
+]
+default-members = ["."]
+
+[package]
+name = "xbox-controller-core"
+description = "Allocation-free parser for Xbox Series controller BLE input reports"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository = "https://github.com/wallem89/esp-xbox-controller-rs"
+homepage = "https://github.com/wallem89/esp-xbox-controller-rs"
+documentation = "https://docs.rs/xbox-controller-core"
+readme = "README.md"
+keywords = ["xbox", "controller", "hid", "ble", "embedded"]
+categories = ["embedded", "no-std", "parser-implementations"]
+include = [
+    "src/**",
+    "CHANGELOG.md",
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
+    "README.md",
+    "TODO.md",
+]
+
+[features]
+default = []
+
+[dependencies]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.85"
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+opt-level = "s"
