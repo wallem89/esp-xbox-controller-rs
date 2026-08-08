@@ -4,7 +4,8 @@
 [![Crates.io](https://img.shields.io/crates/v/xbox-controller-core.svg)](https://crates.io/crates/xbox-controller-core)
 [![Docs.rs](https://docs.rs/xbox-controller-core/badge.svg)](https://docs.rs/xbox-controller-core/)
 [![CI Status](https://github.com/wallem89/esp-xbox-controller-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/wallem89/esp-xbox-controller-rs/actions/workflows/ci.yml)
-[![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/xbox-controller-core.svg)](https://github.com/wallem89/esp-xbox-controller-rs#license)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Apache-2.0](https://img.shields.io/badge/License-apache-yellow.svg)](https://opensource.org/license/apache-2.0)
 
 This repository consists of three crates.
 
