@@ -1,9 +1,6 @@
 [workspace]
 resolver = "2"
-members = [
-    ".",
-    "examples/esp32-c3-example",
-]
+members = [".", "examples/esp32-c3-example"]
 default-members = ["."]
 
 [package]
@@ -13,20 +10,13 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-repository = "https://github.com/wallem89/esp-xbox-controller-rs"
-homepage = "https://github.com/wallem89/esp-xbox-controller-rs"
+repository.workspace = true
+homepage.workspace = true
 documentation = "https://docs.rs/xbox-controller-core"
-readme = "README.md"
-keywords = ["xbox", "controller", "hid", "ble", "embedded"]
-categories = ["embedded", "no-std", "parser-implementations"]
-include = [
-    "src/**",
-    "CHANGELOG.md",
-    "LICENSE-APACHE",
-    "LICENSE-MIT",
-    "README.md",
-    "TODO.md",
-]
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+include.workspace = true
 
 [features]
 default = []
@@ -36,8 +26,21 @@ default = []
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
+authors = ["Willem Roovers <willemroovers@protonmail.com>"]
 license = "MIT OR Apache-2.0"
-rust-version = "1.85"
+homepage = "https://github.com/wallem89/esp-xbox-controller-rs"
+repository = "https://github.com/wallem89/esp-xbox-controller-rs"
+readme = "README.md"
+keywords = ["xbox", "esp32", "hid", "ble", "embedded"]
+categories = ["embedded", "no-std", "parser-implementations"]
+include = [
+    "src/**",
+    "CHANGELOG.md",
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
+    "README.md",
+]
+rust-version = "1.96.0"
 
 [profile.release]
 codegen-units = 1

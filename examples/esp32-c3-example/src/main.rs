@@ -8,7 +8,7 @@ use embassy_futures::{
     select::{Either3, select3},
 };
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
-use embassy_time::Duration;
+use embassy_time::{Duration, Timer, with_timeout};
 use esp_backtrace as _;
 use esp_hal::{
     interrupt::software::SoftwareInterruptControl,
@@ -88,6 +88,7 @@ where
     let finder = XboxAdvertisementFinder { found: &found };
 
     join(runner.run_with_handler(&finder), async {
+        let mut attempt: u32 = 0;
         loop {
             println!("scanning for Xbox Wireless Controller (HID 0x1812)");
             let (returned_central, target) = scan_for_xbox(central, &found).await;
@@ -101,11 +102,27 @@ where
                 kind: target.0,
                 addr: target.1,
             };
-            println!("connecting to {}", target_address);
+            attempt = attempt.wrapping_add(1);
+            println!("connection attempt {} to {}", attempt, target_address);
+
+            // Let the controller and host controller settle after active scan
+            // cancellation. Model 1708 is unreliable when LE Create Connection
+            // immediately follows its advertisement/scan response.
+            Timer::after_millis(100).await;
 
             let filter = [(target.0, &target.1)];
             let config = ConnectConfig {
-                connect_params: Default::default(),
+                // NimBLE-compatible initial parameters also work better with
+                // older BLE 4.x Xbox controllers such as Model 1708 than
+                // TrouBLE 0.6's relatively slow fixed 80 ms default.
+                connect_params: RequestedConnParams {
+                    min_connection_interval: Duration::from_millis(15),
+                    max_connection_interval: Duration::from_millis(30),
+                    max_latency: 0,
+                    min_event_length: Duration::from_secs(0),
+                    max_event_length: Duration::from_secs(0),
+                    supervision_timeout: Duration::from_secs(5),
+                },
                 scan_config: ScanConfig {
                     filter_accept_list: &filter,
                     ..Default::default()
@@ -121,8 +138,19 @@ where
             };
             println!("connected; starting pairing/encryption");
 
-            if let Err(error) = connection.set_bondable(true) {
-                println!("could not enable bonding: {:?}; reconnecting", error);
+            // Give the first connection event time to complete before sending
+            // SMP traffic. Debug logging previously supplied this delay by
+            // accident; keeping it explicit makes release behavior stable.
+            Timer::after_millis(100).await;
+
+            // Do not request a persistent bond until this example also stores
+            // the matching key in ESP32 flash. A controller-only bond becomes
+            // stale whenever the board resets and loses TrouBLE's RAM state.
+            if let Err(error) = connection.set_bondable(false) {
+                println!(
+                    "could not configure non-bondable pairing: {:?}; reconnecting",
+                    error
+                );
                 connection.disconnect();
                 embassy_time::Timer::after_secs(1).await;
                 continue;
@@ -133,9 +161,23 @@ where
                 embassy_time::Timer::after_secs(1).await;
                 continue;
             }
-            if !wait_for_pairing(&stack, &connection).await {
-                embassy_time::Timer::after_secs(1).await;
-                continue;
+            match with_timeout(
+                Duration::from_secs(20),
+                wait_for_pairing(&stack, &connection),
+            )
+            .await
+            {
+                Ok(true) => {}
+                Ok(false) => {
+                    embassy_time::Timer::after_secs(1).await;
+                    continue;
+                }
+                Err(_) => {
+                    println!("application pairing deadline reached after 20000 ms");
+                    connection.disconnect();
+                    embassy_time::Timer::after_secs(1).await;
+                    continue;
+                }
             }
 
             println!("creating GATT client");
@@ -216,7 +258,7 @@ async fn monitor_connection<C: Controller, P: PacketPool>(
                 println!("controller requested unsupported passkey input");
                 return;
             }
-            _ => {}
+            event => println!("post-pairing connection event: {:?}", event),
         }
     }
 }
@@ -398,7 +440,7 @@ async fn wait_for_pairing<C: Controller, P: PacketPool>(
             } => {
                 println!("pairing complete: {:?}", security_level);
                 if bond.is_some() {
-                    println!("bond created (persistent storage is not implemented yet)");
+                    println!("unexpected bond returned during non-bondable pairing");
                 }
                 return true;
             }
@@ -440,7 +482,7 @@ async fn wait_for_pairing<C: Controller, P: PacketPool>(
                 connection.disconnect();
                 return false;
             }
-            _ => {}
+            event => println!("pairing connection event: {:?}", event),
         }
     }
 }

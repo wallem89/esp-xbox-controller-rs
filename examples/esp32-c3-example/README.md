@@ -10,11 +10,18 @@ an ESP-IDF application. It only emits application metadata in the image format
 expected by the ESP-IDF-compatible second-stage bootloader used by `espflash`.
 The firmware remains `no_std`, bare-metal, and based on `esp-hal`.
 
-The target controller is Xbox Wireless Controller **Model 1914**. Use firmware
+The primary target is Xbox Wireless Controller **Model 1914**. Use firmware
 `5.13.3143.0` or newer as the oldest known protocol baseline, and preferably
 update to the latest firmware offered by the Xbox Accessories app before testing.
 That baseline comes from the reference Arduino implementation; this Rust example
 has not yet established its own minimum through hardware testing.
+
+Xbox Wireless Controller **Model 1708** is also supported experimentally. It
+must have firmware that exposes Bluetooth Low Energy HID; update it with Xbox
+Accessories first. Unlike Model 1914, its older BLE hardware can require LE
+Legacy Pairing, which this example enables explicitly. Firmware `5.13.3143.0`
+has successfully connected, paired, completed HID discovery, and subscribed to
+the input Report characteristic on a XIAO ESP32-C3.
 
 The example does **not** generate fake controller notifications. Every byte
 shown by `BLE notification` came from the subscribed GATT characteristic.
@@ -58,13 +65,23 @@ subscribing to input notifications
 ready; move a stick or press a button
 ```
 
-Pairing keys are not stored persistently yet. After resetting the board, put the
-controller into pairing mode again.
+Pairing is deliberately non-bondable because keys are not stored in ESP32 flash
+yet. This prevents the controller remembering a key that the board loses on
+reset. After resetting the board, put the controller into pairing mode again.
+Controllers previously tested with a bondable firmware build may retain its old
+stale bond; explicitly enter pairing mode for the first non-bondable connection.
 
 Transient BLE failures do not panic or reboot the board. A scan, connection,
 pairing, synchronization-timeout, GATT, or subscription failure is logged; the
 application then waits one second and resumes scanning. If the controller exits
 pairing mode, hold its Pair button again while the board is rescanning.
+
+The connection sequence includes explicit 100 ms settling periods after scan
+cancellation and link establishment. These are required for reliable Model 1708
+operation; debug logging originally exposed the timing dependency by adding the
+same delay accidentally. Pairing also has a 20-second application deadline so a
+silent peer is disconnected and retried instead of waiting until the controller
+powers off.
 
 ## Selecting a controller
 

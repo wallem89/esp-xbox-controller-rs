@@ -13,15 +13,30 @@ embassy-futures = "0.1"
 embassy-sync = "0.8"
 embassy-time = "0.5"
 esp-alloc = { version = "0.10", features = ["esp32c3"] }
-esp-backtrace = { version = "0.19", features = ["esp32c3", "panic-handler", "println"] }
+esp-backtrace = { version = "0.19", features = [
+    "esp32c3",
+    "panic-handler",
+    "println",
+] }
 esp-bootloader-esp-idf = { version = "0.5", features = ["esp32c3"] }
 esp-hal = { version = "1.1", features = ["esp32c3", "unstable"] }
 esp-println = { version = "0.17", features = ["esp32c3", "log-04"] }
-esp-radio = { version = "1.0.0-beta.0", features = ["esp32c3", "ble", "esp-alloc", "unstable"] }
-esp-rtos = { version = "0.3", features = ["esp32c3", "embassy", "esp-radio", "esp-alloc"] }
+esp-radio = { version = "1.0.0-beta.0", features = [
+    "esp32c3",
+    "ble",
+    "esp-alloc",
+    "unstable",
+] }
+esp-rtos = { version = "0.3", features = [
+    "esp32c3",
+    "embassy",
+    "esp-radio",
+    "esp-alloc",
+] }
 log = "0.4"
-trouble-host = { version = "0.6", features = [
+trouble-host = { git = "https://github.com/embassy-rs/trouble", rev = "fad811b", features = [
     "default-packet-pool-mtu-255",
+    "legacy-pairing",
     "log",
     "scan",
     "security",
