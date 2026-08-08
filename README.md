@@ -6,7 +6,7 @@
 [![CI Status](https://github.com/wallem89/esp-xbox-controller-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/wallem89/esp-xbox-controller-rs/actions/workflows/ci.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/xbox-controller-core.svg)](https://github.com/wallem89/esp-xbox-controller-rs#license)
 
-This repository consists of two crates
+This repository consists of three crates.
 
 ## Core
 A Rust crate for connecting an ESP32-C3 to an Xbox Series
@@ -16,6 +16,15 @@ state.
 ## Examples
 At the moment one example is tested on the [Seeed Studio XIAO ESP32-C3](https://www.seeedstudio.com/Seeed-XIAO-ESP32C3-p-5431.html).
 This board costs around 6 euros that comes including an external antenna.
+
+## Inspector
+
+`xbox-controller-inspector` is a publishable Ubuntu AMD64 GUI for scanning and
+connecting to a BLE controller, viewing its address and firmware revision,
+diagnosing live inputs, and testing vibration. Install it with
+`cargo install xbox-controller-inspector`. See the
+[`tools/xbox-controller-inspector` README](tools/xbox-controller-inspector/README.md)
+for BlueZ and Linux package requirements.
 
 ## Supported controller
 
@@ -76,6 +85,8 @@ project. Stick values are translated from unsigned `0..=65535` to signed
   transport-independent parser.
 - `examples/esp32-c3-example`: XIAO ESP32-C3 `no_std` application using
   `esp-hal`, Embassy via `esp-rtos`, and `esp-radio` initialization. See its README for more information.
+- `tools/xbox-controller-inspector`: publishable Ubuntu AMD64 desktop GUI using
+  BlueZ to inspect controller identity, input reports, and vibration.
 
 ## Testing with a XIAO ESP32-C3 and Model 1914 or 1708
 

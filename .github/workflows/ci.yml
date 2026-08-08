@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -41,6 +41,32 @@ jobs:
 
       - name: Verify crates.io package
         run: cargo package -p xbox-controller-core
+
+  inspector:
+    name: Ubuntu controller inspector
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libdbus-1-dev libudev-dev libxkbcommon-dev pkg-config
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Check inspector
+        run: cargo check -p xbox-controller-inspector --all-targets
+
+      - name: Test inspector
+        run: cargo test -p xbox-controller-inspector --all-targets
+
+      - name: Run inspector Clippy
+        run: cargo clippy -p xbox-controller-inspector --all-targets -- -D warnings
 
   esp32-c3-example:
     name: ESP32-C3 example

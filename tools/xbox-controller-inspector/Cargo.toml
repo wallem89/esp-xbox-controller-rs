@@ -1,0 +1,30 @@
+[package]
+name = "xbox-controller-inspector"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+description = "GUI tool for inspecting Xbox controller BLE reports"
+homepage = "https://github.com/wallem89/esp-xbox-controller-rs"
+documentation = "https://docs.rs/xbox-controller-inspector"
+readme = "README.md"
+keywords = ["xbox", "gamepad", "ble", "egui", "inspector"]
+categories = ["development-tools", "gui"]
+
+[[bin]]
+name = "xbox-controller-inspector"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+btleplug = "0.12"
+bluer = { version = "0.17", features = ["bluetoothd"] }
+eframe = "0.35"
+egui = "0.35"
+evdev = "0.13"
+futures = "0.3"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+uuid = "1"
+xbox-controller-core = { version = "0.1", path = "../.." }

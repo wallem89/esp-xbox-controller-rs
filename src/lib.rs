@@ -7,5 +7,5 @@ mod report;
 mod state;
 
 pub use error::ParseError;
-pub use report::parse_input_report;
+pub use report::{INPUT_REPORT_LEN, parse_input_report};
 pub use state::{XboxButtonState, XboxControllerState, XboxSticks, XboxTriggers};

@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
-members = [".", "examples/esp32-c3-example"]
-default-members = ["."]
+members = [".", "examples/esp32-c3-example", "tools/xbox-controller-inspector"]
+default-members = [".", "tools/xbox-controller-inspector"]
 
 [workspace.package]
 version = "0.1.0"
