@@ -3,36 +3,30 @@ resolver = "2"
 members = [".", "examples/esp32-c3-example"]
 default-members = ["."]
 
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.96.0"
+repository = "https://github.com/wallem89/esp-xbox-controller-rs"
+
 [package]
 name = "xbox-controller-core"
-description = "Allocation-free parser for Xbox Series controller BLE input reports"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
-homepage.workspace = true
-documentation = "https://docs.rs/xbox-controller-core"
-readme.workspace = true
-keywords.workspace = true
-categories.workspace = true
-include.workspace = true
 
-[features]
-default = []
-
-[dependencies]
-
-[workspace.package]
-version = "0.1.0"
-edition = "2024"
-authors = ["Willem Roovers <willemroovers@protonmail.com>"]
-license = "MIT OR Apache-2.0"
+description = "no_std parser for Xbox Series controller BLE input reports"
 homepage = "https://github.com/wallem89/esp-xbox-controller-rs"
-repository = "https://github.com/wallem89/esp-xbox-controller-rs"
+documentation = "https://docs.rs/xbox-controller-core"
 readme = "README.md"
-keywords = ["xbox", "esp32", "hid", "ble", "embedded"]
+
+
+keywords = ["xbox", "gamepad", "hid", "ble", "no-std"]
 categories = ["embedded", "no-std", "parser-implementations"]
+
 include = [
     "src/**",
     "CHANGELOG.md",
@@ -40,7 +34,11 @@ include = [
     "LICENSE-MIT",
     "README.md",
 ]
-rust-version = "1.96.0"
+
+[features]
+default = []
+
+[dependencies]
 
 [profile.release]
 codegen-units = 1

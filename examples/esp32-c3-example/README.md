@@ -39,6 +39,11 @@ From this directory:
 cargo run --release
 ```
 
+After pairing, HID discovery, and notification subscription succeed, the
+example plays a short confirmation pulse using all four motors at 25% for 0.20
+seconds. Failure to discover or write the Xbox output Report produces a warning
+without interrupting controller input.
+
 Run this command from `examples/esp32-c3-example`, not from the workspace root.
 Cargo then loads the example's `.cargo/config.toml`, including the ESP32-C3
 target, `espflash` runner, and `-Tlinkall.x` linker script. Without that linker

@@ -388,11 +388,56 @@ async fn use_xbox_reports<C: Controller, P: PacketPool, const SERVICES: usize>(
             return;
         }
     };
+
+    play_connection_rumble(client, hid).await;
+
     println!("ready; move a stick or press a button");
 
     loop {
         let notification = notifications.next().await;
         handle_notification(notification.as_ref());
+    }
+}
+
+async fn play_connection_rumble<C: Controller, P: PacketPool, const SERVICES: usize>(
+    client: &GattClient<'_, C, P, SERVICES>,
+    hid: &ServiceHandle,
+) {
+    // HID Report 0x2A4D appears twice on Xbox controllers. TrouBLE 0.6's
+    // UUID lookup returns the first (input) instance, so discover the complete
+    // HID characteristic table and select the report with the Write property.
+    // The HID Control Point is Write Without Response only, which excludes it.
+    let characteristics = match client.characteristics::<16>(hid).await {
+        Ok(characteristics) => characteristics,
+        Err(error) => {
+            println!("WARNING: output Report discovery failed: {:?}", error);
+            return;
+        }
+    };
+    let Some(output_report) = characteristics
+        .iter()
+        .find(|characteristic| characteristic.props.any(&[CharacteristicProp::Write]))
+    else {
+        println!("WARNING: controller has no writable HID output Report");
+        return;
+    };
+
+    // Xbox PID output Report ID 3 payload (the Report ID is represented by the
+    // GATT characteristic and is not included in the value): select all four
+    // motors, 50% power, active for 0.20 seconds, no repeat.
+    const CONNECTED_PULSE: [u8; 8] = [0x0f, 50, 50, 50, 50, 20, 0, 0];
+    println!(
+        "playing connection rumble via handle 0x{:04x}",
+        output_report.handle
+    );
+    match client
+        .write_characteristic_without_response(output_report, &CONNECTED_PULSE)
+        .await
+    {
+        Ok(()) => {}
+        Err(error) => {
+            println!("WARNING: connection rumble write failed: {:?}", error);
+        }
     }
 }
 

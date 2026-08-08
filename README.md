@@ -136,6 +136,10 @@ it from `examples/esp32-c3-example` with `cargo run --release` after installing
 `espflash`. The working directory matters: running there loads its local Cargo
 configuration and the required ESP linker script.
 
+The example plays a short best-effort vibration pulse after a controller is
+fully connected. Controllers without a writable output Report continue working
+for input and produce only a warning.
+
 ## License
 
 Licensed under either Apache License 2.0 or MIT, at your option.
