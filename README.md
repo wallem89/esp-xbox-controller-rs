@@ -142,9 +142,10 @@ Licensed under either Apache License 2.0 or MIT, at your option.
 
 ## Contributing and releases
 
-Notable changes are recorded in [`CHANGELOG.md`](CHANGELOG.md). Before publishing,
-run `cargo publish --dry-run`; publishing the parser itself is then done with
-`cargo publish -p xbox-controller-core`.
+Notable changes are recorded in [`CHANGELOG.md`](CHANGELOG.md).
 
-This repository took inspiration from
+If you want to contribute by testing or extending the features of this repository,
+for instance to support more ESP32 boards, let me know!
+
+This repository took inspiration from: 
 [XboxSeriesXControllerESP32](https://github.com/asukiaaa/arduino-XboxSeriesXControllerESP32).
