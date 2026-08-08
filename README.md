@@ -17,19 +17,18 @@ state.
 At the moment one example is tested on the [Seeed Studio XIAO ESP32-C3](https://www.seeedstudio.com/Seeed-XIAO-ESP32C3-p-5431.html).
 This board costs around 6 euros that comes including an external antenna.
 
-
 ## Supported controller
 
 The initial target is the standard **Xbox Wireless Controller Model 1914**, also
 known as the third-revision controller introduced with Xbox Series X|S in 2020.
 You can confirm the model number on the label inside the battery compartment.
 Model 1914 has a Share button, USB-C, and BLE HID-over-GATT support; see the
-[Xbox Wireless Controller model summary][controller-summary].
+[Xbox Wireless Controller model summary](https://en.wikipedia.org/wiki/Xbox_Wireless_Controller#Summary).
 
 Model 1914 and model 1708 with firmware `5.23.6.0` are the current test targets.
 
 Before testing, connect the controller to Windows over USB and install the latest
-firmware offered by the [Xbox Accessories app][xbox-accessories]. Do not downgrade
+firmware offered by the [Xbox Accessories app](https://www.microsoft.com/en-us/p/xbox-accessories/9nblggh30xj3). Do not downgrade
 or try to install exactly `5.13.3143.0`.
 
 Models 1537 and 1697 do not support Bluetooth and cannot work with this BLE
@@ -147,4 +146,5 @@ Notable changes are recorded in [`CHANGELOG.md`](CHANGELOG.md). Before publishin
 run `cargo publish --dry-run`; publishing the parser itself is then done with
 `cargo publish -p xbox-controller-core`.
 
-This repository took inspiration from [XboxSeriesXControllerESP32](`https://github.com/asukiaaa/arduino-XboxSeriesXControllerESP32`).
+This repository took inspiration from
+[XboxSeriesXControllerESP32](https://github.com/asukiaaa/arduino-XboxSeriesXControllerESP32).
