@@ -5,6 +5,13 @@ Xbox Wireless Controller over Bluetooth Low Energy. It displays the controller
 address and firmware revision, visualizes buttons, sticks, and triggers, shows
 the raw HID input report, and can trigger all four vibration motors.
 
+![Xbox Controller Inspector showing connected, paired, and discovered Bluetooth devices alongside live controller inputs](assets/xbox-controller-inspector.png)
+
+The device list provides actions appropriate to each Bluetooth state: disconnect
+connected devices, forget paired devices, or connect devices that are not yet set
+up. The main panel displays live button and analog input values for the active
+controller.
+
 ## Install
 
 ```console

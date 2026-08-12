@@ -18,18 +18,18 @@ name = "xbox-controller-inspector"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1"
+anyhow = "1.0.104"
 btleplug = "0.12"
-bluer = { version = "0.17", features = ["bluetoothd"] }
-eframe = "0.36"
-egui = "0.36"
-evdev = "0.13"
-futures = "0.3"
-tokio = { version = "1", features = [
+bluer = { version = "0.17.4", features = ["bluetoothd"] }
+eframe = "0.36.1"
+egui = "0.36.1"
+evdev = "0.13.2"
+futures = "0.3.34"
+tokio = { version = "1.53.1", features = [
     "rt-multi-thread",
     "macros",
     "sync",
     "time",
 ] }
-uuid = "1"
+uuid = "1.24.0"
 xbox-controller-core = { version = "0.1", path = "../.." }
