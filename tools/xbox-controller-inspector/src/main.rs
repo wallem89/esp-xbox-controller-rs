@@ -2,7 +2,11 @@
 
 use std::{
     collections::HashMap,
-    sync::mpsc::{self, Receiver, Sender},
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+        mpsc::{self, Receiver, Sender},
+    },
     thread,
     time::Duration,
 };
@@ -33,15 +37,24 @@ struct Device {
     address: String,
     rssi: Option<i16>,
     likely_xbox: bool,
-    paired: bool,
+    state: DeviceState,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum DeviceState {
+    Connected,
+    Disconnected,
+    NotSetUp,
 }
 
 enum Command {
     Scan,
     StopScan,
     Connect(String),
+    Read(String),
+    Forget(String),
     Vibrate,
-    Disconnect,
+    Disconnect(String),
 }
 
 enum Event {
@@ -49,6 +62,7 @@ enum Event {
     Scanning(bool),
     Devices(Vec<Device>),
     Connected {
+        device_id: String,
         name: String,
         address: String,
         firmware: String,
@@ -73,6 +87,7 @@ struct InspectorApp {
     selected: Option<String>,
     status: String,
     scanning: bool,
+    active_device_id: Option<String>,
     connected_name: Option<String>,
     address: String,
     firmware: String,
@@ -94,6 +109,7 @@ impl InspectorApp {
             selected: None,
             status: "Starting Bluetooth scan…".into(),
             scanning: false,
+            active_device_id: None,
             connected_name: None,
             address: "—".into(),
             firmware: "—".into(),
@@ -113,6 +129,7 @@ impl InspectorApp {
                 Event::Scanning(scanning) => self.scanning = scanning,
                 Event::Devices(devices) => self.devices = devices,
                 Event::Connected {
+                    device_id,
                     name,
                     address,
                     firmware,
@@ -120,6 +137,7 @@ impl InspectorApp {
                     can_vibrate,
                 } => {
                     self.status = format!("Connected to {name}");
+                    self.active_device_id = Some(device_id);
                     self.connected_name = Some(name);
                     self.address = address;
                     self.firmware = firmware;
@@ -145,6 +163,7 @@ impl InspectorApp {
                 }
                 Event::Disconnected => {
                     self.status = "Controller disconnected".into();
+                    self.active_device_id = None;
                     self.connected_name = None;
                     self.can_vibrate = false;
                     self.battery = None;
@@ -165,6 +184,9 @@ impl eframe::App for InspectorApp {
                 ui.heading("Xbox Controller Inspector");
                 ui.separator();
                 ui.label(&self.status);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.weak(format!("v{}", env!("CARGO_PKG_VERSION")));
+                });
             });
         });
 
@@ -187,49 +209,95 @@ impl eframe::App for InspectorApp {
             });
             ui.small("Likely Xbox/HID devices are shown first.");
             ui.separator();
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                for (heading, paired) in [("Paired", true), ("Unpaired", false)] {
-                    ui.heading(heading);
-                    let mut count = 0;
-                    for device in self.devices.iter().filter(|device| device.paired == paired) {
-                        count += 1;
-                        let marker = if device.likely_xbox { "🎮 " } else { "" };
-                        let rssi = device.rssi.map_or(String::new(), |v| format!("  {v} dBm"));
-                        let text = format!("{marker}{}\n{}{}", device.name, device.address, rssi);
-                        if ui
-                            .selectable_label(self.selected.as_ref() == Some(&device.id), text)
-                            .clicked()
-                        {
-                            self.selected = Some(device.id.clone());
-                        }
-                    }
-                    if count == 0 {
-                        ui.weak("No devices");
-                    }
-                    ui.add_space(10.0);
+            for (heading, state, visible_rows) in [
+                ("Paired (connected)", DeviceState::Connected, 5),
+                ("Paired (disconnected)", DeviceState::Disconnected, 5),
+                ("Not Set Up", DeviceState::NotSetUp, 10),
+            ] {
+                ui.heading(heading);
+                let devices = self
+                    .devices
+                    .iter()
+                    .filter(|device| device.state == state)
+                    .cloned()
+                    .collect::<Vec<_>>();
+                if devices.is_empty() {
+                    ui.weak("No devices");
+                } else {
+                    let row_height = ui.text_style_height(&egui::TextStyle::Body) * 2.0
+                        + ui.spacing().item_spacing.y;
+                    egui::ScrollArea::vertical()
+                        .id_salt(("device_list", state))
+                        .max_height(row_height * visible_rows as f32)
+                        .show(ui, |ui| {
+                            for device in devices {
+                                let marker = if device.likely_xbox { "🎮 " } else { "" };
+                                let rssi =
+                                    device.rssi.map_or(String::new(), |v| format!("  {v} dBm"));
+                                let text =
+                                    format!("{marker}{}\n{}{}", device.name, device.address, rssi);
+                                ui.horizontal(|ui| {
+                                    if ui
+                                        .selectable_label(
+                                            self.selected.as_ref() == Some(&device.id),
+                                            text,
+                                        )
+                                        .clicked()
+                                    {
+                                        self.selected = Some(device.id.clone());
+                                    }
+                                    if state == DeviceState::Connected && device.likely_xbox {
+                                        let is_reading =
+                                            self.active_device_id.as_ref() == Some(&device.id);
+                                        if ui
+                                            .add_enabled(
+                                                !is_reading,
+                                                egui::Button::new(if is_reading {
+                                                    "Reading"
+                                                } else {
+                                                    "Read"
+                                                }),
+                                            )
+                                            .clicked()
+                                        {
+                                            self.selected = Some(device.id.clone());
+                                            let _ = self
+                                                .command_tx
+                                                .send(Command::Read(device.id.clone()));
+                                        }
+                                    }
+                                    let (label, command) = match state {
+                                        DeviceState::Connected => {
+                                            ("Disconnect", Command::Disconnect(device.id.clone()))
+                                        }
+                                        DeviceState::Disconnected => {
+                                            ("Forget", Command::Forget(device.id.clone()))
+                                        }
+                                        DeviceState::NotSetUp => {
+                                            ("Connect", Command::Connect(device.id.clone()))
+                                        }
+                                    };
+                                    if ui.button(label).clicked() {
+                                        self.selected = Some(device.id.clone());
+                                        if state == DeviceState::Disconnected {
+                                            self.devices.retain(|listed| listed.id != device.id);
+                                            self.selected = None;
+                                        } else if state == DeviceState::Connected
+                                            && let Some(listed) = self
+                                                .devices
+                                                .iter_mut()
+                                                .find(|listed| listed.id == device.id)
+                                        {
+                                            listed.state = DeviceState::Disconnected;
+                                        }
+                                        let _ = self.command_tx.send(command);
+                                    }
+                                });
+                            }
+                        });
                 }
-            });
-            ui.separator();
-            ui.horizontal(|ui| {
-                let connect = ui.add_enabled(
-                    self.selected.is_some() && self.connected_name.is_none(),
-                    egui::Button::new("Connect"),
-                );
-                if connect.clicked() {
-                    let _ = self.command_tx.send(Command::Connect(
-                        self.selected.clone().expect("enabled only with selection"),
-                    ));
-                }
-                if ui
-                    .add_enabled(
-                        self.connected_name.is_some(),
-                        egui::Button::new("Disconnect"),
-                    )
-                    .clicked()
-                {
-                    let _ = self.command_tx.send(Command::Disconnect);
-                }
-            });
+                ui.add_space(10.0);
+            }
         });
 
         egui::CentralPanel::default().show(ui, |ui| {
@@ -364,34 +432,55 @@ fn find_and_start_evdev_reader(
     address: &str,
     bluetooth_name: &str,
     event_tx: Sender<Event>,
+    input_generation: Arc<AtomicU64>,
+    generation: u64,
 ) -> Option<std::path::PathBuf> {
     let normalized_address = address.replace(':', "").to_ascii_lowercase();
     let wanted_name = bluetooth_name.to_ascii_lowercase();
     let mut selected = None;
     for _ in 0..20 {
-        selected = evdev::enumerate().find(|(_, device)| {
-            let name = device.name().unwrap_or_default().to_ascii_lowercase();
-            let unique = device
+        let mut gamepads = evdev::enumerate()
+            .filter(|(_, device)| {
+                device
+                    .supported_keys()
+                    .is_some_and(|keys| keys.contains(KeyCode::BTN_SOUTH))
+            })
+            .collect::<Vec<_>>();
+
+        if let Some(index) = gamepads.iter().position(|(_, device)| {
+            device
                 .unique_name()
                 .unwrap_or_default()
                 .replace(':', "")
-                .to_ascii_lowercase();
-            let looks_like_gamepad = device
-                .supported_keys()
-                .is_some_and(|keys| keys.contains(KeyCode::BTN_SOUTH));
-            looks_like_gamepad
-                && (unique == normalized_address
-                    || name.contains("xbox")
+                .eq_ignore_ascii_case(&normalized_address)
+        }) {
+            selected = Some(gamepads.swap_remove(index));
+        } else {
+            // A name is only a safe fallback when it identifies exactly one
+            // gamepad. Multiple Xbox controllers usually have identical names.
+            gamepads.retain(|(_, device)| {
+                let name = device.name().unwrap_or_default().to_ascii_lowercase();
+                name.contains("xbox")
                     || name.contains("x-box")
-                    || (!wanted_name.is_empty() && name == wanted_name))
-        });
+                    || (!wanted_name.is_empty() && name == wanted_name)
+            });
+            if gamepads.len() == 1 {
+                selected = gamepads.pop();
+            }
+        }
         if selected.is_some() {
             break;
         }
         thread::sleep(Duration::from_millis(100));
     }
     let (path, mut device) = selected?;
-    start_share_button_readers(&path, &normalized_address, event_tx.clone());
+    start_share_button_readers(
+        &path,
+        &normalized_address,
+        event_tx.clone(),
+        input_generation.clone(),
+        generation,
+    );
     let axis_ranges = device
         .get_absinfo()
         .ok()?
@@ -403,9 +492,15 @@ fn find_and_start_evdev_reader(
     thread::spawn(move || {
         let mut state = XboxControllerState::default();
         loop {
+            if input_generation.load(Ordering::Relaxed) != generation {
+                break;
+            }
             match device.fetch_events() {
                 Ok(events) => {
                     for input in events {
+                        if input_generation.load(Ordering::Relaxed) != generation {
+                            return;
+                        }
                         let summary = input.destructure();
                         let event = format!("{summary:?}");
                         apply_linux_input(&mut state, summary, &axis_ranges, xbox_ble_layout);
@@ -425,6 +520,48 @@ fn find_and_start_evdev_reader(
         }
     });
     Some(path)
+}
+
+fn start_evdev_watcher(
+    address: String,
+    bluetooth_name: String,
+    event_tx: Sender<Event>,
+    input_generation: Arc<AtomicU64>,
+    generation: u64,
+) {
+    thread::spawn(move || {
+        // BlueZ may establish the BLE link before the kernel has finished creating
+        // the HID input node. Keep looking instead of giving up after the initial
+        // short lookup in `find_and_start_evdev_reader`.
+        for _ in 0..12 {
+            if input_generation.load(Ordering::Relaxed) != generation {
+                return;
+            }
+            if find_and_start_evdev_reader(
+                &address,
+                &bluetooth_name,
+                event_tx.clone(),
+                input_generation.clone(),
+                generation,
+            )
+            .is_some()
+            {
+                event_tx
+                    .send(Event::Status(
+                        "Connected; receiving Linux controller input".into(),
+                    ))
+                    .ok();
+                return;
+            }
+            thread::sleep(Duration::from_millis(500));
+        }
+        event_tx
+            .send(Event::Error(
+                "Linux did not expose a readable controller input device within 30 seconds; check pairing and /dev/input permissions"
+                    .into(),
+            ))
+            .ok();
+    });
 }
 
 fn apply_linux_input(
@@ -498,6 +635,8 @@ fn start_share_button_readers(
     gamepad_path: &std::path::Path,
     normalized_address: &str,
     event_tx: Sender<Event>,
+    input_generation: Arc<AtomicU64>,
+    generation: u64,
 ) {
     for (path, mut device) in evdev::enumerate() {
         if path == gamepad_path {
@@ -512,17 +651,21 @@ fn start_share_button_readers(
             .unwrap_or_default()
             .replace(':', "")
             .to_ascii_lowercase();
-        let name = device.name().unwrap_or_default().to_ascii_lowercase();
-        let belongs_to_controller = (!unique.is_empty() && unique == normalized_address)
-            || name.contains("xbox")
-            || name.contains("x-box");
+        let belongs_to_controller = !unique.is_empty() && unique == normalized_address;
         if !exposes_share || !belongs_to_controller {
             continue;
         }
         let tx = event_tx.clone();
+        let input_generation = input_generation.clone();
         thread::spawn(move || {
-            while let Ok(events) = device.fetch_events() {
+            while input_generation.load(Ordering::Relaxed) == generation {
+                let Ok(events) = device.fetch_events() else {
+                    break;
+                };
                 for input in events {
+                    if input_generation.load(Ordering::Relaxed) != generation {
+                        return;
+                    }
                     if let EventSummary::Key(_, KeyCode::KEY_RECORD | KeyCode::KEY_F12, value) =
                         input.destructure()
                     {
@@ -585,6 +728,7 @@ struct Backend {
     connected: Option<Peripheral>,
     output: Option<btleplug::api::Characteristic>,
     evdev_path: Option<std::path::PathBuf>,
+    input_generation: Arc<AtomicU64>,
     scanning: bool,
 }
 
@@ -604,6 +748,7 @@ impl Backend {
             connected: None,
             output: None,
             evdev_path: None,
+            input_generation: Arc::new(AtomicU64::new(0)),
             scanning: false,
         })
     }
@@ -622,6 +767,16 @@ impl Backend {
         self.scanning = true;
         self.event_tx.send(Event::Scanning(true)).ok();
         tokio::time::sleep(Duration::from_secs(3)).await;
+        self.refresh_devices().await?;
+        self.event_tx
+            .send(Event::Status(
+                "Scanning… device list updates automatically".into(),
+            ))
+            .ok();
+        Ok(())
+    }
+
+    async fn refresh_devices(&mut self) -> Result<()> {
         let pairing_adapter = match bluer::Session::new().await {
             Ok(session) => session.default_adapter().await.ok(),
             Err(_) => None,
@@ -633,45 +788,60 @@ impl Backend {
             let Some(properties) = peripheral.properties().await? else {
                 continue;
             };
-            let name = properties
+            let address = properties.address.to_string();
+            let advertised_name = properties
                 .local_name
                 .or(properties.advertisement_name)
-                .unwrap_or_else(|| "Unknown device".into());
-            let likely_xbox = name.to_ascii_lowercase().contains("xbox");
-            let paired = if let (Some(adapter), Ok(address)) = (
-                &pairing_adapter,
-                properties.address.to_string().parse::<bluer::Address>(),
-            ) {
+                .filter(|name| !name.is_empty() && name != &address);
+            let (bluez_name, paired) = if let (Some(adapter), Ok(address)) =
+                (&pairing_adapter, address.parse::<bluer::Address>())
+            {
                 match adapter.device(address) {
-                    Ok(device) => device.is_paired().await.unwrap_or(false),
-                    Err(_) => false,
+                    Ok(device) => (
+                        device
+                            .alias()
+                            .await
+                            .ok()
+                            .filter(|name| !name.is_empty() && name != &address.to_string())
+                            .or(device.name().await.ok().flatten()),
+                        device.is_paired().await.unwrap_or(false),
+                    ),
+                    Err(_) => (None, false),
                 }
             } else {
-                false
+                (None, false)
+            };
+            let name = bluez_name
+                .or(advertised_name)
+                .unwrap_or_else(|| "Unknown device".into());
+            let likely_xbox = name.to_ascii_lowercase().contains("xbox")
+                || properties.manufacturer_data.contains_key(&0x045e);
+            let connected = peripheral.is_connected().await.unwrap_or(false);
+            let state = if connected {
+                DeviceState::Connected
+            } else if paired {
+                DeviceState::Disconnected
+            } else {
+                DeviceState::NotSetUp
             };
             found.push(Device {
                 id: id.clone(),
                 name,
-                address: properties.address.to_string(),
+                address,
                 rssi: properties.rssi,
                 likely_xbox,
-                paired,
+                state,
             });
             self.devices.insert(id, peripheral);
         }
         found.sort_by_key(|device| {
             (
                 !device.likely_xbox,
-                !device.paired,
+                device.state,
                 device.name.to_ascii_lowercase(),
             )
         });
         self.event_tx.send(Event::Devices(found)).ok();
-        self.event_tx
-            .send(Event::Status(
-                "Scanning… press Stop scanning when your controller appears".into(),
-            ))
-            .ok();
         Ok(())
     }
 
@@ -687,11 +857,14 @@ impl Backend {
         Ok(())
     }
 
-    async fn connect(&mut self, id: &str) -> Result<()> {
+    async fn rescan(&mut self) -> Result<()> {
         self.stop_scan().await?;
-        if let Some(old) = self.connected.take() {
-            let _ = old.disconnect().await;
-        }
+        self.scan().await
+    }
+
+    async fn activate(&mut self, id: &str, pair: bool) -> Result<()> {
+        self.stop_scan().await?;
+        let generation = self.input_generation.fetch_add(1, Ordering::Relaxed) + 1;
         let peripheral = self
             .devices
             .get(id)
@@ -706,19 +879,42 @@ impl Backend {
             .as_deref()
             .or(advertised.advertisement_name.as_deref())
             .unwrap_or_default();
-        let is_xbox = advertised_name.to_ascii_lowercase().contains("xbox");
+        let bluez_name = if let Ok(session) = bluer::Session::new().await {
+            if let (Ok(adapter), Ok(address)) = (
+                session.default_adapter().await,
+                advertised.address.to_string().parse::<bluer::Address>(),
+            ) {
+                match adapter.device(address) {
+                    Ok(device) => device.alias().await.unwrap_or_default(),
+                    Err(_) => String::new(),
+                }
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        };
+        let is_xbox = advertised_name.to_ascii_lowercase().contains("xbox")
+            || bluez_name.to_ascii_lowercase().contains("xbox")
+            || advertised.manufacturer_data.contains_key(&0x045e);
         if !is_xbox {
             return Err(anyhow!(
-                "automatic pairing is limited to devices whose advertised name contains Xbox"
+                "automatic pairing is limited to devices identified as Xbox controllers"
             ));
         }
-        self.event_tx
-            .send(Event::Status(
-                "Pairing controller and automatically accepting confirmation…".into(),
-            ))
-            .ok();
-        pair_xbox_controller(&advertised.address.to_string()).await?;
-        self.event_tx.send(Event::Status("Connecting…".into())).ok();
+        if pair {
+            self.event_tx
+                .send(Event::Status(
+                    "Pairing controller and automatically accepting confirmation…".into(),
+                ))
+                .ok();
+            pair_xbox_controller(&advertised.address.to_string()).await?;
+            self.event_tx.send(Event::Status("Connecting…".into())).ok();
+        } else {
+            self.event_tx
+                .send(Event::Status("Starting controller input reader…".into()))
+                .ok();
+        }
         if !peripheral.is_connected().await? {
             peripheral
                 .connect_with_timeout(Duration::from_secs(15))
@@ -803,8 +999,12 @@ impl Backend {
         if !subscribed.is_empty() || battery_subscribed {
             let mut notifications = peripheral.notifications().await?;
             let tx = self.event_tx.clone();
+            let input_generation = self.input_generation.clone();
             tokio::spawn(async move {
                 while let Some(notification) = notifications.next().await {
+                    if input_generation.load(Ordering::Relaxed) != generation {
+                        break;
+                    }
                     if notification.uuid == BATTERY_CHARACTERISTIC {
                         if let Some(level) = notification.value.first() {
                             tx.send(Event::Battery(*level)).ok();
@@ -830,22 +1030,27 @@ impl Backend {
             &properties.address.to_string(),
             &name,
             self.event_tx.clone(),
+            self.input_generation.clone(),
+            generation,
         );
+        if self.evdev_path.is_none() {
+            start_evdev_watcher(
+                properties.address.to_string(),
+                name.clone(),
+                self.event_tx.clone(),
+                self.input_generation.clone(),
+                generation,
+            );
+        }
         let can_vibrate = self.output.is_some()
             || self
                 .evdev_path
                 .as_ref()
                 .is_some_and(|path| evdev_supports_rumble(path));
-        if self.evdev_path.is_none() && inputs.is_empty() {
-            self.event_tx
-                .send(Event::Status(
-                    "Connected, but Linux exposed no readable controller input device. Check /dev/input permissions"
-                        .into(),
-                ))
-                .ok();
-        }
+        let waiting_for_linux_input = self.evdev_path.is_none() && inputs.is_empty();
         self.event_tx
             .send(Event::Connected {
+                device_id: id.to_owned(),
                 name,
                 address: properties.address.to_string(),
                 firmware,
@@ -853,8 +1058,24 @@ impl Backend {
                 can_vibrate,
             })
             .ok();
+        if waiting_for_linux_input {
+            self.event_tx
+                .send(Event::Status(
+                    "BLE connected; waiting for Linux to expose the controller input device…"
+                        .into(),
+                ))
+                .ok();
+        }
         self.connected = Some(peripheral);
         Ok(())
+    }
+
+    async fn connect(&mut self, id: &str) -> Result<()> {
+        self.activate(id, true).await
+    }
+
+    async fn read(&mut self, id: &str) -> Result<()> {
+        self.activate(id, false).await
     }
 
     async fn vibrate(&self) -> Result<()> {
@@ -896,14 +1117,59 @@ impl Backend {
         Ok(())
     }
 
-    async fn disconnect(&mut self) -> Result<()> {
-        if let Some(peripheral) = self.connected.take() {
-            peripheral.disconnect().await?;
+    async fn disconnect(&mut self, id: &str) -> Result<()> {
+        let peripheral = self
+            .devices
+            .get(id)
+            .cloned()
+            .ok_or_else(|| anyhow!("selected device is no longer available; scan again"))?;
+        let is_active = self
+            .connected
+            .as_ref()
+            .is_some_and(|connected| connected.id() == peripheral.id());
+        peripheral.disconnect().await?;
+        if is_active {
+            self.input_generation.fetch_add(1, Ordering::Relaxed);
+            self.connected = None;
+            self.output = None;
+            self.evdev_path = None;
+            self.event_tx.send(Event::Disconnected).ok();
+        } else {
+            self.event_tx
+                .send(Event::Status("Controller disconnected".into()))
+                .ok();
         }
-        self.output = None;
-        self.evdev_path = None;
-        self.event_tx.send(Event::Disconnected).ok();
         Ok(())
+    }
+
+    async fn forget(&mut self, id: &str) -> Result<()> {
+        let peripheral = self
+            .devices
+            .get(id)
+            .cloned()
+            .ok_or_else(|| anyhow!("selected device is no longer available; scan again"))?;
+        let properties = peripheral
+            .properties()
+            .await?
+            .ok_or_else(|| anyhow!("device properties unavailable"))?;
+        let address = properties
+            .address
+            .to_string()
+            .parse::<bluer::Address>()
+            .context("parsing the controller Bluetooth address")?;
+        let session = bluer::Session::new().await?;
+        session
+            .default_adapter()
+            .await?
+            .remove_device(address)
+            .await?;
+        self.devices.remove(id);
+        self.event_tx
+            .send(Event::Status(
+                "Controller pairing removed; rescanning…".into(),
+            ))
+            .ok();
+        self.rescan().await
     }
 }
 
@@ -928,13 +1194,29 @@ fn start_backend() -> (tokio_mpsc::UnboundedSender<Command>, Receiver<Event>) {
                     return;
                 }
             };
-            while let Some(command) = command_rx.recv().await {
-                let result = match command {
-                    Command::Scan => backend.scan().await,
-                    Command::StopScan => backend.stop_scan().await,
-                    Command::Connect(id) => backend.connect(&id).await,
-                    Command::Vibrate => backend.vibrate().await,
-                    Command::Disconnect => backend.disconnect().await,
+            let mut refresh_interval = tokio::time::interval(Duration::from_secs(2));
+            refresh_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                let result = tokio::select! {
+                    command = command_rx.recv() => {
+                        let Some(command) = command else { break };
+                        match command {
+                            Command::Scan => backend.scan().await,
+                            Command::StopScan => backend.stop_scan().await,
+                            Command::Connect(id) => {
+                                let connect_result = backend.connect(&id).await;
+                                let rescan_result = backend.rescan().await;
+                                connect_result.and(rescan_result)
+                            }
+                            Command::Read(id) => backend.read(&id).await,
+                            Command::Forget(id) => backend.forget(&id).await,
+                            Command::Vibrate => backend.vibrate().await,
+                            Command::Disconnect(id) => backend.disconnect(&id).await,
+                        }
+                    }
+                    _ = refresh_interval.tick(), if backend.scanning => {
+                        backend.refresh_devices().await
+                    }
                 };
                 if let Err(error) = result {
                     event_tx.send(Event::Error(format!("{error:#}"))).ok();
@@ -971,7 +1253,7 @@ fn configure_system_font(context: &egui::Context) {
 fn main() -> eframe::Result {
     let (command_tx, event_rx) = start_backend();
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([900.0, 620.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([900.0, 900.0]),
         ..Default::default()
     };
     eframe::run_native(
