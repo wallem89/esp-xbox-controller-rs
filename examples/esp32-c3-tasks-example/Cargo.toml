@@ -9,6 +9,7 @@ publish = false
 [dependencies]
 embassy-executor = "0.10"
 embassy-sync = "0.8"
+embassy-time = "0.5"
 esp-alloc = { version = "0.10", features = ["esp32c3"] }
 esp-backtrace = { version = "0.19", features = [
     "esp32c3",

@@ -10,12 +10,12 @@ use esp_hal::{
 };
 use esp_println::println;
 use esp_radio::ble::controller::BleConnector;
-use esp_xbox_controller::{ControllerSelector, run};
+use esp_xbox_controller::{ControllerConfig, ControllerSelector, run};
 use trouble_host::prelude::ExternalController;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
-const CONTROLLER: ControllerSelector = ControllerSelector::AnyXbox;
+const CONTROLLER: ControllerConfig = ControllerConfig::new(ControllerSelector::AnyXbox, None);
 
 #[esp_rtos::main]
 async fn main(_spawner: Spawner) -> ! {

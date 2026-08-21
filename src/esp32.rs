@@ -1,10 +1,10 @@
 use bt_hci::{cmd::le::LeSetScanParams, controller::ControllerCmdSync};
 use embassy_futures::{
     join::join,
-    select::{Either3, select3},
+    select::{Either, Either3, select, select3},
 };
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
-use embassy_time::{Duration, Timer, with_timeout};
+use embassy_time::{Duration, Instant, Timer, with_timeout};
 use esp_hal::rng::Trng;
 use esp_println::println;
 use trouble_host::prelude::*;
@@ -16,6 +16,11 @@ const L2CAP_CHANNELS_MAX: usize = 3;
 const GATT_SERVICES_MAX: usize = 16;
 const XBOX_NAME: &[u8] = b"Xbox Wireless Controller";
 const HID_SERVICE_UUID: [u8; 2] = [0x12, 0x18];
+const HID_IDLE_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(10);
+const IDLE_DISCONNECT_COOLDOWN: Duration = Duration::from_secs(30);
+// Select all four actuators but command zero power. A zero selection mask is
+// ignored by Xbox firmware and therefore does not count as host activity.
+const IDLE_KEEPALIVE_REPORT: [u8; 8] = [0x0f, 0, 0, 0, 0, 0, 0, 0];
 
 /// Which compatible controller the BLE scan should select.
 ///
@@ -29,6 +34,29 @@ pub enum ControllerSelector {
     Address([u8; 6]),
 }
 
+/// Connection behavior for an Xbox controller.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ControllerConfig {
+    /// Which compatible advertising controller may be connected.
+    pub selector: ControllerSelector,
+    /// Disconnect after this much time without a changed input report.
+    /// `None` keeps the controller awake indefinitely.
+    pub idle_disconnect_after: Option<Duration>,
+}
+
+impl ControllerConfig {
+    /// Creates a configuration that keeps the selected controller connected.
+    pub const fn new(
+        selector: ControllerSelector,
+        idle_disconnect_after: Option<Duration>,
+    ) -> Self {
+        Self {
+            selector,
+            idle_disconnect_after,
+        }
+    }
+}
+
 type Peer = (AddrKind, BdAddr);
 
 /// Connects to the selected controller, reconnecting when necessary, and calls
@@ -36,7 +64,7 @@ type Peer = (AddrKind, BdAddr);
 pub async fn run<C, F>(
     controller: C,
     random: &mut Trng,
-    selector: ControllerSelector,
+    config: ControllerConfig,
     mut on_notification: F,
 ) -> !
 where
@@ -56,7 +84,7 @@ where
     let found = Signal::<CriticalSectionRawMutex, Peer>::new();
     let finder = XboxAdvertisementFinder {
         found: &found,
-        selector,
+        selector: config.selector,
     };
 
     join(runner.run_with_handler(&finder), async {
@@ -83,7 +111,7 @@ where
             Timer::after_millis(100).await;
 
             let filter = [(target.0, &target.1)];
-            let config = ConnectConfig {
+            let connection_config = ConnectConfig {
                 // NimBLE-compatible initial parameters also work better with
                 // older BLE 4.x Xbox controllers such as Model 1708 than
                 // TrouBLE 0.6's relatively slow fixed 80 ms default.
@@ -100,7 +128,7 @@ where
                     ..Default::default()
                 },
             };
-            let connection = match central.connect(&config).await {
+            let connection = match central.connect(&connection_config).await {
                 Ok(connection) => connection,
                 Err(error) => {
                     println!("BLE connection failed: {:?}; rescanning", error);
@@ -168,20 +196,38 @@ where
                 }
             };
 
-            match select3(
+            let idle_disconnect = match select3(
                 client.task(),
-                use_xbox_reports(&client, &mut on_notification),
+                use_xbox_reports(&client, &mut on_notification, config.idle_disconnect_after),
                 monitor_connection(&stack, &connection),
             )
             .await
             {
-                Either3::First(result) => println!("GATT client stopped: {:?}", result),
-                Either3::Second(()) => println!("Xbox report session stopped"),
-                Either3::Third(()) => println!("BLE connection event task stopped"),
-            }
+                Either3::First(result) => {
+                    println!("GATT client stopped: {:?}", result);
+                    false
+                }
+                Either3::Second(idle_disconnect) => {
+                    if idle_disconnect {
+                        println!("controller idle timeout reached; disconnecting");
+                    } else {
+                        println!("Xbox report session stopped");
+                    }
+                    idle_disconnect
+                }
+                Either3::Third(()) => {
+                    println!("BLE connection event task stopped");
+                    false
+                }
+            };
             connection.disconnect();
-            println!("connection ended; rescanning in 1 second");
-            embassy_time::Timer::after_secs(1).await;
+            if idle_disconnect {
+                println!("waiting for controller shutdown before rescanning");
+                Timer::after(IDLE_DISCONNECT_COOLDOWN).await;
+            } else {
+                println!("connection ended; rescanning in 1 second");
+                Timer::after_secs(1).await;
+            }
         }
     })
     .await;
@@ -238,7 +284,9 @@ async fn monitor_connection<C: Controller, P: PacketPool>(
 async fn use_xbox_reports<C: Controller, P: PacketPool, const SERVICES: usize, F>(
     client: &GattClient<'_, C, P, SERVICES>,
     on_notification: &mut F,
-) where
+    idle_disconnect_after: Option<Duration>,
+) -> bool
+where
     F: FnMut(Result<XboxControllerState, ParseError>),
 {
     println!("discovering HID service 0x1812");
@@ -246,12 +294,12 @@ async fn use_xbox_reports<C: Controller, P: PacketPool, const SERVICES: usize, F
         Ok(services) => services,
         Err(error) => {
             println!("HID service discovery failed: {:?}", error);
-            return;
+            return false;
         }
     };
     let Some(hid) = services.first() else {
         println!("controller has no HID service");
-        return;
+        return false;
     };
 
     // Perform the normal HID-over-GATT enumeration reads before subscribing.
@@ -265,7 +313,7 @@ async fn use_xbox_reports<C: Controller, P: PacketPool, const SERVICES: usize, F
         Ok(characteristic) => characteristic,
         Err(error) => {
             println!("HID Information discovery failed: {:?}", error);
-            return;
+            return false;
         }
     };
     let mut hid_information_value = [0_u8; 8];
@@ -280,7 +328,7 @@ async fn use_xbox_reports<C: Controller, P: PacketPool, const SERVICES: usize, F
         ),
         Err(error) => {
             println!("HID Information read failed: {:?}", error);
-            return;
+            return false;
         }
     }
 
@@ -292,7 +340,7 @@ async fn use_xbox_reports<C: Controller, P: PacketPool, const SERVICES: usize, F
         Ok(characteristic) => characteristic,
         Err(error) => {
             println!("HID Report Map discovery failed: {:?}", error);
-            return;
+            return false;
         }
     };
     let mut report_map_value = [0_u8; 255];
@@ -303,9 +351,11 @@ async fn use_xbox_reports<C: Controller, P: PacketPool, const SERVICES: usize, F
         Ok(len) => println!("HID Report Map read: {} bytes", len),
         Err(error) => {
             println!("HID Report Map read failed: {:?}", error);
-            return;
+            return false;
         }
     }
+
+    initialize_hid_host(client, hid).await;
 
     println!("discovering HID Report characteristic 0x2A4D");
     let report: Characteristic<[u8]> = match client
@@ -315,7 +365,7 @@ async fn use_xbox_reports<C: Controller, P: PacketPool, const SERVICES: usize, F
         Ok(report) => report,
         Err(error) => {
             println!("Report characteristic discovery failed: {:?}", error);
-            return;
+            return false;
         }
     };
 
@@ -334,7 +384,7 @@ async fn use_xbox_reports<C: Controller, P: PacketPool, const SERVICES: usize, F
         Ok(len) => len,
         Err(error) => {
             println!("initial Report read failed: {:?}", error);
-            return;
+            return false;
         }
     };
     if initial_len == 0 {
@@ -345,7 +395,7 @@ async fn use_xbox_reports<C: Controller, P: PacketPool, const SERVICES: usize, F
             Ok(len) => len,
             Err(error) => {
                 println!("second initial Report read failed: {:?}", error);
-                return;
+                return false;
             }
         };
     }
@@ -360,39 +410,109 @@ async fn use_xbox_reports<C: Controller, P: PacketPool, const SERVICES: usize, F
         Ok(notifications) => notifications,
         Err(error) => {
             println!("input notification subscription failed: {:?}", error);
-            return;
+            return false;
         }
     };
 
-    play_connection_rumble(client, hid).await;
+    // Keep the discovered table alive for the session because its writable
+    // Report characteristic is also used for idle keepalives.
+    let hid_characteristics = client.characteristics::<16>(hid).await.ok();
+    let output_report = hid_characteristics.as_ref().and_then(|characteristics| {
+        characteristics
+            .iter()
+            .find(|characteristic| characteristic.props.any(&[CharacteristicProp::Write]))
+    });
+    play_connection_rumble(client, output_report).await;
 
     println!("ready; move a stick or press a button");
+    match idle_disconnect_after {
+        Some(duration) => println!(
+            "idle disconnect configured for {} seconds",
+            duration.as_secs()
+        ),
+        None => println!("idle disconnect disabled"),
+    }
+    let mut previous_state = None;
+    let mut idle_deadline = idle_disconnect_after.map(|duration| Instant::now() + duration);
+    let mut keepalive_deadline = Instant::now() + HID_IDLE_KEEPALIVE_INTERVAL;
 
     loop {
-        let notification = notifications.next().await;
-        on_notification(parse_input_report(notification.as_ref()));
+        let next_timer = idle_deadline
+            .map(|idle| idle.min(keepalive_deadline))
+            .unwrap_or(keepalive_deadline);
+        match select(Timer::at(next_timer), notifications.next()).await {
+            Either::First(()) => {
+                let now = Instant::now();
+                if idle_deadline.is_some_and(|deadline| now >= deadline) {
+                    return true;
+                }
+                if let Some(output_report) = output_report
+                    && let Err(error) = client
+                        .write_characteristic_without_response(
+                            output_report,
+                            &IDLE_KEEPALIVE_REPORT,
+                        )
+                        .await
+                {
+                    println!("WARNING: controller keepalive write failed: {:?}", error);
+                    return false;
+                }
+                keepalive_deadline = Instant::now() + HID_IDLE_KEEPALIVE_INTERVAL;
+            }
+            Either::Second(notification) => {
+                let parsed = parse_input_report(notification.as_ref());
+                if parsed
+                    .as_ref()
+                    .is_ok_and(|state| Some(*state) != previous_state)
+                {
+                    previous_state = parsed.as_ref().ok().copied();
+                    idle_deadline = idle_disconnect_after.map(|duration| Instant::now() + duration);
+                }
+                on_notification(parsed);
+            }
+        }
+    }
+}
+
+async fn initialize_hid_host<C: Controller, P: PacketPool, const SERVICES: usize>(
+    client: &GattClient<'_, C, P, SERVICES>,
+    hid: &ServiceHandle,
+) {
+    // A HID host uses Report Protocol and tells the device it is not suspended.
+    // BlueZ performs the same HOG initialization for the desktop inspector.
+    if let Ok(protocol_mode) = client
+        .characteristic_by_uuid::<u8>(hid, &Uuid::new_short(0x2a4e))
+        .await
+    {
+        let mut mode = [0_u8; 1];
+        if client
+            .read_characteristic(&protocol_mode, &mut mode)
+            .await
+            .is_ok()
+            && mode[0] != 0x01
+        {
+            let _ = client
+                .write_characteristic_without_response(&protocol_mode, &[0x01])
+                .await;
+        }
+    }
+
+    if let Ok(control_point) = client
+        .characteristic_by_uuid::<u8>(hid, &Uuid::new_short(0x2a4c))
+        .await
+    {
+        // HID Control Point value 0x01 means Exit Suspend.
+        let _ = client
+            .write_characteristic_without_response(&control_point, &[0x01])
+            .await;
     }
 }
 
 async fn play_connection_rumble<C: Controller, P: PacketPool, const SERVICES: usize>(
     client: &GattClient<'_, C, P, SERVICES>,
-    hid: &ServiceHandle,
+    output_report: Option<&Characteristic<[u8]>>,
 ) {
-    // HID Report 0x2A4D appears twice on Xbox controllers. TrouBLE 0.6's
-    // UUID lookup returns the first (input) instance, so discover the complete
-    // HID characteristic table and select the report with the Write property.
-    // The HID Control Point is Write Without Response only, which excludes it.
-    let characteristics = match client.characteristics::<16>(hid).await {
-        Ok(characteristics) => characteristics,
-        Err(error) => {
-            println!("WARNING: output Report discovery failed: {:?}", error);
-            return;
-        }
-    };
-    let Some(output_report) = characteristics
-        .iter()
-        .find(|characteristic| characteristic.props.any(&[CharacteristicProp::Write]))
-    else {
+    let Some(output_report) = output_report else {
         println!("WARNING: controller has no writable HID output Report");
         return;
     };

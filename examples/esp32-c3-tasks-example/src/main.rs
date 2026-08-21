@@ -3,6 +3,7 @@
 
 use embassy_executor::Spawner;
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channel};
+use embassy_time::Duration;
 use esp_backtrace as _;
 use esp_hal::{
     interrupt::software::SoftwareInterruptControl,
@@ -12,13 +13,15 @@ use esp_hal::{
 };
 use esp_println::println;
 use esp_radio::ble::controller::BleConnector;
-use esp_xbox_controller::{ControllerSelector, XboxControllerState, run};
+use esp_xbox_controller::{ControllerConfig, ControllerSelector, XboxControllerState, run};
 use trouble_host::prelude::ExternalController;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
-const CONTROLLER: ControllerSelector =
-    ControllerSelector::Address([0xC0, 0xD6, 0xD5, 0xEA, 0xBE, 0x85]);
+const CONTROLLER: ControllerConfig = ControllerConfig::new(
+    ControllerSelector::Address([0xC0, 0xD6, 0xD5, 0xEA, 0xBE, 0x85]),
+    Some(Duration::from_secs(5 * 60)),
+);
 const CHANNEL_CAPACITY: usize = 8;
 
 static CONTROLLER_STATES: Channel<CriticalSectionRawMutex, XboxControllerState, CHANNEL_CAPACITY> =

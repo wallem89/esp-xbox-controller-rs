@@ -70,9 +70,10 @@ hardware random-number generator to `run`. The callback receives every parsed
 notification and can forward it to an Embassy channel or watch:
 
 ```rust,ignore
-use esp_xbox_controller::{ControllerSelector, run};
+use esp_xbox_controller::{ControllerConfig, ControllerSelector, run};
 
-run(ble, &mut random, ControllerSelector::AnyXbox, |notification| {
+let config = ControllerConfig::new(ControllerSelector::AnyXbox);
+run(ble, &mut random, config, |notification| {
     if let Ok(state) = notification {
         // Print state, or send it through an Embassy channel/watch.
     }
@@ -82,6 +83,8 @@ run(ble, &mut random, ControllerSelector::AnyXbox, |notification| {
 
 Select one observed controller with
 `ControllerSelector::Address([0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff])`.
+Set `ControllerConfig::idle_disconnect_after` to disconnect after a period with
+no changed controller state. Its default of `None` keeps the connection alive.
 
 The report parser remains available independently and without ESP dependencies:
 

@@ -7,6 +7,10 @@ controller input from application work using Embassy tasks:
   states to a bounded Embassy channel.
 - `print_task` waits on that channel and prints each state.
 
+Its `ControllerConfig` disconnects after five minutes without a changed button,
+stick, or trigger state. The library then allows 30 seconds for the controller
+to power down before it resumes scanning for a later reconnection.
+
 This structure leaves the executor free to run additional application tasks.
 The controller callback uses non-blocking channel sends because the library's
 notification callback is synchronous. If the consumer cannot keep up, a full

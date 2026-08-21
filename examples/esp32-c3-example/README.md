@@ -92,7 +92,7 @@ powers off.
 The example defaults to:
 
 ```rust
-const CONTROLLER: ControllerSelector = ControllerSelector::AnyXbox;
+const CONTROLLER: ControllerConfig = ControllerConfig::new(ControllerSelector::AnyXbox);
 ```
 
 This selects the first compatible advertisement. For a simple setup, put only
@@ -101,8 +101,9 @@ the controller you want into pairing mode.
 To restrict initial discovery to one observed BLE address, change it to:
 
 ```rust
-const CONTROLLER: ControllerSelector =
-    ControllerSelector::Address([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]);
+const CONTROLLER: ControllerConfig = ControllerConfig::new(
+    ControllerSelector::Address([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]),
+);
 ```
 
 The bytes follow the displayed `AA:BB:CC:DD:EE:FF` order. Address filtering will
