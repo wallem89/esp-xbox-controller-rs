@@ -7,11 +7,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
-bt-hci = "0.8"
 embassy-executor = "0.10"
-embassy-futures = "0.1"
-embassy-sync = "0.8"
-embassy-time = "0.5"
 esp-alloc = { version = "0.10", features = ["esp32c3"] }
 esp-backtrace = { version = "0.19", features = [
     "esp32c3",
@@ -33,7 +29,6 @@ esp-rtos = { version = "0.3", features = [
     "esp-radio",
     "esp-alloc",
 ] }
-log = "0.4"
 trouble-host = { git = "https://github.com/embassy-rs/trouble", rev = "fad811b", features = [
     "default-packet-pool-mtu-255",
     "legacy-pairing",
@@ -41,4 +36,4 @@ trouble-host = { git = "https://github.com/embassy-rs/trouble", rev = "fad811b",
     "scan",
     "security",
 ] }
-xbox-controller-core = { path = "../.." }
+esp-xbox-controller = { path = "../..", features = ["esp32-c3"] }

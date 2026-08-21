@@ -3,7 +3,7 @@
 Experimental `no_std` demo for a Seeed Studio XIAO ESP32-C3. It uses `esp-hal`,
 Embassy through `esp-rtos`, `esp-radio`, and TrouBLE to scan for an Xbox
 controller, connect and pair, discover HID, subscribe to input notifications,
-and parse them with `xbox-controller-core`.
+and parse them with `esp-xbox-controller`.
 
 Despite its name, the `esp-bootloader-esp-idf` dependency does not turn this into
 an ESP-IDF application. It only emits application metadata in the image format
@@ -23,8 +23,8 @@ Legacy Pairing, which this example enables explicitly. Firmware `5.13.3143.0`
 has successfully connected, paired, completed HID discovery, and subscribed to
 the input Report characteristic on a XIAO ESP32-C3.
 
-The example does **not** generate fake controller notifications. Every byte
-shown by `BLE notification` came from the subscribed GATT characteristic.
+The example does **not** generate fake controller notifications. Every state
+printed by its callback is parsed from the subscribed GATT characteristic.
 
 ## Prerequisites
 
@@ -40,7 +40,7 @@ cargo run --release
 ```
 
 After pairing, HID discovery, and notification subscription succeed, the
-example plays a short confirmation pulse using all four motors at 25% for 0.20
+example plays a short confirmation pulse using all four motors at 50% for 0.20
 seconds. Failure to discover or write the Xbox output Report produces a warning
 without interrupting controller input.
 
@@ -55,7 +55,6 @@ Start the firmware, then hold the controller Pair button until the Xbox button
 flashes rapidly. Expected progress is:
 
 ```text
-esp-radio BLE controller initialized
 scanning for Xbox Wireless Controller (HID 0x1812)
 found compatible Xbox at ...
 connecting to ...
@@ -93,7 +92,7 @@ powers off.
 The example defaults to:
 
 ```rust
-const CONTROLLER_SELECTOR: ControllerSelector = ControllerSelector::AnyXbox;
+const CONTROLLER: ControllerSelector = ControllerSelector::AnyXbox;
 ```
 
 This selects the first compatible advertisement. For a simple setup, put only
@@ -102,7 +101,7 @@ the controller you want into pairing mode.
 To restrict initial discovery to one observed BLE address, change it to:
 
 ```rust
-const CONTROLLER_SELECTOR: ControllerSelector =
+const CONTROLLER: ControllerSelector =
     ControllerSelector::Address([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]);
 ```
 

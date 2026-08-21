@@ -11,16 +11,16 @@ rust-version = "1.96.0"
 repository = "https://github.com/wallem89/esp-xbox-controller-rs"
 
 [package]
-name = "xbox-controller-core"
+name = "esp-xbox-controller"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 
-description = "no_std parser for Xbox Series controller BLE input reports"
+description = "Xbox controller BLE library for ESP32, with a reusable no_std report parser"
 homepage = "https://github.com/wallem89/esp-xbox-controller-rs"
-documentation = "https://docs.rs/xbox-controller-core"
+documentation = "https://docs.rs/esp-xbox-controller"
 readme = "README.md"
 
 
@@ -37,8 +37,30 @@ include = [
 
 [features]
 default = []
+esp32-c3 = [
+    "dep:bt-hci",
+    "dep:embassy-futures",
+    "dep:embassy-sync",
+    "dep:embassy-time",
+    "dep:esp-hal",
+    "dep:esp-println",
+    "dep:trouble-host",
+]
 
 [dependencies]
+bt-hci = { version = "0.8", optional = true }
+embassy-futures = { version = "0.1", optional = true }
+embassy-sync = { version = "0.8", optional = true }
+embassy-time = { version = "0.5", optional = true }
+esp-hal = { version = "1.1", features = ["esp32c3", "unstable"], optional = true }
+esp-println = { version = "0.17", features = ["esp32c3", "log-04"], optional = true }
+trouble-host = { git = "https://github.com/embassy-rs/trouble", rev = "fad811b", features = [
+    "default-packet-pool-mtu-255",
+    "legacy-pairing",
+    "log",
+    "scan",
+    "security",
+], optional = true }
 
 [profile.release]
 codegen-units = 1
