@@ -1,0 +1,40 @@
+[package]
+name = "esp32-c3-tasks-example"
+description = "Task and channel based Xbox controller demo for the XIAO ESP32-C3"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+embassy-executor = "0.10"
+embassy-sync = "0.8"
+esp-alloc = { version = "0.10", features = ["esp32c3"] }
+esp-backtrace = { version = "0.19", features = [
+    "esp32c3",
+    "panic-handler",
+    "println",
+] }
+esp-bootloader-esp-idf = { version = "0.5", features = ["esp32c3"] }
+esp-hal = { version = "1.1", features = ["esp32c3", "unstable"] }
+esp-println = { version = "0.17", features = ["esp32c3", "log-04"] }
+esp-radio = { version = "1.0.0-beta.0", features = [
+    "esp32c3",
+    "ble",
+    "esp-alloc",
+    "unstable",
+] }
+esp-rtos = { version = "0.3", features = [
+    "esp32c3",
+    "embassy",
+    "esp-radio",
+    "esp-alloc",
+] }
+trouble-host = { git = "https://github.com/embassy-rs/trouble", rev = "fad811b", features = [
+    "default-packet-pool-mtu-255",
+    "legacy-pairing",
+    "log",
+    "scan",
+    "security",
+] }
+esp-xbox-controller = { path = "../..", features = ["esp32-c3"] }

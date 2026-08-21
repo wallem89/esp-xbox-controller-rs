@@ -107,6 +107,9 @@ project. Stick values are translated from unsigned `0..=65535` to signed
   ESP BLE connection API.
 - `examples/esp32-c3-example`: XIAO ESP32-C3 `no_std` application using
   `esp-hal`, Embassy via `esp-rtos`, and `esp-radio` initialization. See its README for more information.
+- `examples/esp32-c3-tasks-example`: a more project-like ESP32-C3 application
+  that runs controller input and output printing in separate Embassy tasks,
+  connected by a channel.
 - `tools/xbox-controller-inspector`: publishable Ubuntu AMD64 desktop GUI using
   BlueZ to inspect controller identity, input reports, and vibration.
 
