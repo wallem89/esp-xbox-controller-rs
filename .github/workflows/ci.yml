@@ -13,8 +13,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  core:
-    name: Core crate
+  library:
+    name: Library (transport-independent)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -29,18 +29,18 @@ jobs:
         run: cargo fmt --all --check
 
       - name: Run tests
-        run: cargo test -p xbox-controller-core --all-features
+        run: cargo test -p esp-xbox-controller
 
       - name: Run Clippy
-        run: cargo clippy -p xbox-controller-core --all-targets --all-features -- -D warnings
+        run: cargo clippy -p esp-xbox-controller --all-targets -- -D warnings
 
       - name: Build documentation
         env:
           RUSTDOCFLAGS: -D warnings
-        run: cargo doc -p xbox-controller-core --all-features --no-deps
+        run: cargo doc -p esp-xbox-controller --no-deps
 
       - name: Verify crates.io package
-        run: cargo package -p xbox-controller-core
+        run: cargo package -p esp-xbox-controller
 
   inspector:
     name: Ubuntu controller inspector
@@ -82,4 +82,20 @@ jobs:
 
       - name: Build and link embedded example
         working-directory: examples/esp32-c3-example
+        run: cargo build --release
+
+  esp32-c3-tasks-example:
+    name: ESP32-C3 tasks example
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Rust and RISC-V target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: riscv32imc-unknown-none-elf
+
+      - name: Build and link task-based embedded example
+        working-directory: examples/esp32-c3-tasks-example
         run: cargo build --release
