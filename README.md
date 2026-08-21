@@ -1,8 +1,8 @@
 # xbox-controller-rs
 
 [![Maintenance: actively-developed](https://img.shields.io/badge/maintenance-actively--developed-brightgreen.svg)](https://github.com/rust-lang/cargo/issues/4121)
-[![Crates.io](https://img.shields.io/crates/v/xbox-controller-core.svg)](https://crates.io/crates/xbox-controller-core)
-[![Docs.rs](https://docs.rs/xbox-controller-core/badge.svg)](https://docs.rs/xbox-controller-core/)
+[![Crates.io](https://img.shields.io/crates/v/esp-xbox-controller.svg)](https://crates.io/crates/esp-xbox-controller)
+[![Docs.rs](https://docs.rs/esp-xbox-controller/badge.svg)](https://docs.rs/esp-xbox-controller/)
 [![CI Status](https://github.com/wallem89/esp-xbox-controller-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/wallem89/esp-xbox-controller-rs/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![License: Apache-2.0](https://img.shields.io/badge/License-apache-yellow.svg)](https://opensource.org/license/apache-2.0)
@@ -48,7 +48,7 @@ transport.
 BLE notification bytes
         |
         v
-xbox_controller_core::parse_input_report()
+esp_xbox_controller::parse_input_report()
         |
         v
 XboxControllerState
@@ -65,10 +65,33 @@ raw BLE HID notifications.
 
 ## Usage
 
-```rust
-use xbox_controller_core::parse_input_report;
+On ESP32-C3, enable the `esp32-c3` feature and pass the BLE controller plus the
+hardware random-number generator to `run`. The callback receives every parsed
+notification and can forward it to an Embassy channel or watch:
 
-fn consume(bytes: &[u8]) -> Result<(), xbox_controller_core::ParseError> {
+```rust,ignore
+use esp_xbox_controller::{ControllerConfig, ControllerSelector, run};
+
+let config = ControllerConfig::new(ControllerSelector::AnyXbox);
+run(ble, &mut random, config, |notification| {
+    if let Ok(state) = notification {
+        // Print state, or send it through an Embassy channel/watch.
+    }
+})
+.await
+```
+
+Select one observed controller with
+`ControllerSelector::Address([0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff])`.
+Set `ControllerConfig::idle_disconnect_after` to disconnect after a period with
+no changed controller state. Its default of `None` keeps the connection alive.
+
+The report parser remains available independently and without ESP dependencies:
+
+```rust
+use esp_xbox_controller::parse_input_report;
+
+fn consume(bytes: &[u8]) -> Result<(), esp_xbox_controller::ParseError> {
     let state = parse_input_report(bytes)?;
     // Use state.buttons, state.sticks, and state.triggers.
     Ok(())
@@ -82,10 +105,14 @@ project. Stick values are translated from unsigned `0..=65535` to signed
 
 ## Workspace
 
-- Repository root: publishable `xbox-controller-core` crate and its tested,
-  transport-independent parser.
+- Repository root: publishable `esp-xbox-controller` crate. Its default build
+  is the tested transport-independent parser; the `esp32-c3` feature adds the
+  ESP BLE connection API.
 - `examples/esp32-c3-example`: XIAO ESP32-C3 `no_std` application using
   `esp-hal`, Embassy via `esp-rtos`, and `esp-radio` initialization. See its README for more information.
+- `examples/esp32-c3-tasks-example`: a more project-like ESP32-C3 application
+  that runs controller input and output printing in separate Embassy tasks,
+  connected by a channel.
 - `tools/xbox-controller-inspector`: publishable Ubuntu AMD64 desktop GUI using
   BlueZ to inspect controller identity, input reports, and vibration.
 
@@ -114,7 +141,9 @@ device.
 An optional `ControllerSelector::Address([u8; 6])` is provided for installations
 where multiple Xbox controllers might advertise at once. It filters compatible
 advertisements using an address written in normal `AA:BB:CC:DD:EE:FF` order.
-This configuration remains in the ESP example rather than the parser crate.
+The selector and complete BLE connection lifecycle are provided by the
+library's `esp32` module. The example only initializes the ESP peripherals and
+passes its chosen selector to `esp_xbox_controller::esp32::run`.
 
 An advertising address is not necessarily a permanent device MAC: BLE privacy
 allows private addresses to change. After the initial connection, bonding data

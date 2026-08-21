@@ -2079,6 +2079,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b290846b53db9a3965866964260220b67f2c41cc2dbc0b377e7136239fe168a7"
 
 [[package]]
+name = "esp-xbox-controller"
+version = "0.2.0"
+dependencies = [
+ "bt-hci",
+ "embassy-futures",
+ "embassy-sync 0.8.0",
+ "embassy-time",
+ "esp-hal",
+ "esp-println",
+ "trouble-host",
+]
+
+[[package]]
 name = "esp32"
 version = "0.40.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2089,11 +2102,25 @@ dependencies = [
 
 [[package]]
 name = "esp32-c3-example"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
- "bt-hci",
  "embassy-executor",
- "embassy-futures",
+ "esp-alloc",
+ "esp-backtrace",
+ "esp-bootloader-esp-idf",
+ "esp-hal",
+ "esp-println",
+ "esp-radio",
+ "esp-rtos",
+ "esp-xbox-controller",
+ "trouble-host",
+]
+
+[[package]]
+name = "esp32-c3-tasks-example"
+version = "0.2.0"
+dependencies = [
+ "embassy-executor",
  "embassy-sync 0.8.0",
  "embassy-time",
  "esp-alloc",
@@ -2103,9 +2130,8 @@ dependencies = [
  "esp-println",
  "esp-radio",
  "esp-rtos",
- "log",
+ "esp-xbox-controller",
  "trouble-host",
- "xbox-controller-core",
 ]
 
 [[package]]
@@ -6133,23 +6159,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ea6fc2961e4ef194dcbfe56bb845534d0dc8098940c7e5c012a258bfec6701bd"
 
 [[package]]
-name = "xbox-controller-core"
-version = "0.1.1"
-
-[[package]]
 name = "xbox-controller-inspector"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bluer",
  "btleplug",
  "eframe",
  "egui",
+ "esp-xbox-controller",
  "evdev",
  "futures",
  "tokio",
  "uuid",
- "xbox-controller-core",
 ]
 
 [[package]]

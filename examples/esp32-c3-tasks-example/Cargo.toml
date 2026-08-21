@@ -1,6 +1,6 @@
 [package]
-name = "esp32-c3-example"
-description = "Xbox Series BLE notification demo for the XIAO ESP32-C3"
+name = "esp32-c3-tasks-example"
+description = "Task and channel based Xbox controller demo for the XIAO ESP32-C3"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,6 +8,8 @@ publish = false
 
 [dependencies]
 embassy-executor = "0.10"
+embassy-sync = "0.8"
+embassy-time = "0.5"
 esp-alloc = { version = "0.10", features = ["esp32c3"] }
 esp-backtrace = { version = "0.19", features = [
     "esp32c3",
