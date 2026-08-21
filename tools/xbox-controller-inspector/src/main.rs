@@ -17,7 +17,6 @@ use btleplug::{
     platform::{Adapter, Manager, Peripheral},
 };
 use eframe::egui;
-use esp_xbox_controller::{XboxButtonState, XboxControllerState, parse_input_report};
 use evdev::{
     AbsoluteAxisCode, EventSummary, FFEffectCode, FFEffectData, FFEffectKind, FFReplay, FFTrigger,
     KeyCode,
@@ -25,6 +24,7 @@ use evdev::{
 use futures::StreamExt as _;
 use tokio::sync::mpsc as tokio_mpsc;
 use uuid::{Uuid, uuid};
+use xbox_controller_core::{XboxButtonState, XboxControllerState, parse_input_report};
 
 const REPORT_CHARACTERISTIC: Uuid = uuid!("00002a4d-0000-1000-8000-00805f9b34fb");
 const FIRMWARE_CHARACTERISTIC: Uuid = uuid!("00002a26-0000-1000-8000-00805f9b34fb");
@@ -1010,7 +1010,7 @@ impl Backend {
                             tx.send(Event::Battery(*level)).ok();
                         }
                     } else if subscribed.contains(&(notification.uuid, notification.service_uuid))
-                        && notification.value.len() >= esp_xbox_controller::INPUT_REPORT_LEN
+                        && notification.value.len() >= xbox_controller_core::INPUT_REPORT_LEN
                     {
                         tx.send(Event::Report(notification.value)).ok();
                     }

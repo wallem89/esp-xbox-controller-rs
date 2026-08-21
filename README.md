@@ -7,15 +7,19 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![License: Apache-2.0](https://img.shields.io/badge/License-apache-yellow.svg)](https://opensource.org/license/apache-2.0)
 
-This repository consists of three crates.
+This repository contains the ESP library, its transport-independent core,
+embedded examples, and a desktop inspector.
 
-## Core
-A Rust crate for connecting an ESP32-C3 to an Xbox Series
-controller over BLE and turning its HID notifications into a useful controller
-state.
+## ESP library
+
+`esp-xbox-controller` connects an ESP32-C3 to an Xbox Series controller over BLE
+and turns its HID notifications into useful controller state. The reusable
+parser and state types live in the separate `xbox-controller-core` crate and are
+re-exported by the ESP library.
 
 ## Examples
-At the moment one example is tested on the [Seeed Studio XIAO ESP32-C3](https://www.seeedstudio.com/Seeed-XIAO-ESP32C3-p-5431.html).
+
+The examples are tested on the [Seeed Studio XIAO ESP32-C3](https://www.seeedstudio.com/Seeed-XIAO-ESP32C3-p-5431.html).
 This board costs around 6 euros that comes including an external antenna.
 
 ## Inspector
@@ -105,9 +109,11 @@ project. Stick values are translated from unsigned `0..=65535` to signed
 
 ## Workspace
 
-- Repository root: publishable `esp-xbox-controller` crate. Its default build
-  is the tested transport-independent parser; the `esp32-c3` feature adds the
-  ESP BLE connection API.
+- Repository root: publishable `esp-xbox-controller` crate. It re-exports the
+  core state and parser API; the `esp32-c3` feature adds the ESP BLE connection
+  API.
+- `crates/xbox-controller-core`: publishable, transport-independent `no_std`
+  parser used by the ESP library and desktop inspector.
 - `examples/esp32-c3-example`: XIAO ESP32-C3 `no_std` application using
   `esp-hal`, Embassy via `esp-rtos`, and `esp-radio` initialization. See its README for more information.
 - `examples/esp32-c3-tasks-example`: a more project-like ESP32-C3 application

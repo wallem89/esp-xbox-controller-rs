@@ -1,5 +1,7 @@
 use crate::{ParseError, XboxButtonState, XboxControllerState, XboxSticks, XboxTriggers};
 
+// This parser deliberately remains independent of the BLE transport.
+
 /// Length of the currently supported Xbox Series input report.
 pub const INPUT_REPORT_LEN: usize = 16;
 

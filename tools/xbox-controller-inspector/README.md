@@ -57,7 +57,7 @@ cargo run -p xbox-controller-inspector
 
 The package uses a versioned dependency with a local path override for workspace
 development. Cargo removes the path when packaging, so the published package
-resolves `esp-xbox-controller = "0.2"` from crates.io.
+resolves `xbox-controller-core = "0.1"` from crates.io.
 
 ## License
 

@@ -1,0 +1,18 @@
+[package]
+name = "xbox-controller-core"
+version = "0.1.2"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+description = "no_std parser for Xbox Series controller BLE input reports"
+homepage = "https://github.com/wallem89/esp-xbox-controller-rs"
+documentation = "https://docs.rs/xbox-controller-core"
+readme = "README.md"
+keywords = ["xbox", "gamepad", "hid", "ble", "no-std"]
+categories = ["embedded", "no-std", "parser-implementations"]
+
+include = ["src/**", "CHANGELOG.md", "README.md"]
+
+[dependencies]
