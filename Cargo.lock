@@ -2080,7 +2080,7 @@ checksum = "b290846b53db9a3965866964260220b67f2c41cc2dbc0b377e7136239fe168a7"
 
 [[package]]
 name = "esp-xbox-controller"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "bt-hci",
  "embassy-futures",
@@ -2102,7 +2102,7 @@ dependencies = [
 
 [[package]]
 name = "esp32-c3-example"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "embassy-executor",
  "esp-alloc",
@@ -2118,7 +2118,7 @@ dependencies = [
 
 [[package]]
 name = "esp32-c3-tasks-example"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "embassy-executor",
  "embassy-sync 0.8.0",
@@ -6160,7 +6160,7 @@ checksum = "ea6fc2961e4ef194dcbfe56bb845534d0dc8098940c7e5c012a258bfec6701bd"
 
 [[package]]
 name = "xbox-controller-inspector"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bluer",

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.0] - 2026-08-21
+## Added
+- Keep alive option when controller not used with configurable (indefinitely) time-out
+
+## Changed
+- esp32 core refactored to be easier to import and run
+- Improved re-connect behavior
+
 ## [0.1.1] - 2026-08-12
 
 ## Changed
