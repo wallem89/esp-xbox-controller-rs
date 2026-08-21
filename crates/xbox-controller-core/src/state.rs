@@ -1,4 +1,4 @@
-/// Digital button state from one controller report.
+/// Digital button state from one Xbox controller report.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct XboxButtonState {
     pub a: bool,

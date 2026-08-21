@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     ".",
+    "crates/xbox-controller-core",
     "examples/esp32-c3-example",
     "examples/esp32-c3-tasks-example",
     "tools/xbox-controller-inspector",
@@ -53,6 +54,7 @@ esp32-c3 = [
 ]
 
 [dependencies]
+xbox-controller-core = { version = "0.1", path = "crates/xbox-controller-core" }
 bt-hci = { version = "0.8", optional = true }
 embassy-futures = { version = "0.1", optional = true }
 embassy-sync = { version = "0.8", optional = true }
