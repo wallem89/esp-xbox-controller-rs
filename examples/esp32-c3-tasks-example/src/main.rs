@@ -6,7 +6,6 @@ use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channe
 use embassy_time::Duration;
 use esp_backtrace as _;
 use esp_hal::{
-    interrupt::software::SoftwareInterruptControl,
     peripherals::BT,
     rng::{Trng, TrngSource},
     timer::timg::TimerGroup,
@@ -68,8 +67,7 @@ async fn main(spawner: Spawner) -> ! {
     esp_alloc::heap_allocator!(size: 72 * 1024);
 
     let timer_group = TimerGroup::new(peripherals.TIMG0);
-    let software_interrupts = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
-    esp_rtos::start(timer_group.timer0, software_interrupts.software_interrupt0);
+    esp_rtos::start(timer_group.timer0, peripherals.FROM_CPU_INTR0);
 
     let entropy_source = TrngSource::new(peripherals.RNG, peripherals.ADC1);
     spawner.spawn(print_task().unwrap());

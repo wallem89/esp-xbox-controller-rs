@@ -71,16 +71,14 @@ where
     C: Controller + ControllerCmdSync<LeSetScanParams>,
     F: FnMut(Result<XboxControllerState, ParseError>),
 {
-    let mut resources: HostResources<DefaultPacketPool, CONNECTIONS_MAX, L2CAP_CHANNELS_MAX> =
+    let mut resources: HostResources<C, DefaultPacketPool, CONNECTIONS_MAX, L2CAP_CHANNELS_MAX> =
         HostResources::new();
-    let stack = trouble_host::new(controller, &mut resources).set_random_generator_seed(random);
-    stack.set_io_capabilities(IoCapabilities::NoInputNoOutput);
-
-    let Host {
-        mut central,
-        mut runner,
-        ..
-    } = stack.build();
+    let stack = trouble_host::new(controller, &mut resources)
+        .set_random_generator_seed(random)
+        .set_io_capabilities(IoCapabilities::NoInputNoOutput)
+        .build();
+    let mut central = stack.central();
+    let mut runner = stack.runner();
     let found = Signal::<CriticalSectionRawMutex, Peer>::new();
     let finder = XboxAdvertisementFinder {
         found: &found,
@@ -110,7 +108,7 @@ where
             // immediately follows its advertisement/scan response.
             Timer::after_millis(100).await;
 
-            let filter = [(target.0, &target.1)];
+            let filter = [target_address];
             let connection_config = ConnectConfig {
                 // NimBLE-compatible initial parameters also work better with
                 // older BLE 4.x Xbox controllers such as Model 1708 than
@@ -345,7 +343,7 @@ where
     };
     let mut report_map_value = [0_u8; 255];
     match client
-        .read_characteristic_long(&report_map, &mut report_map_value)
+        .read_characteristic(&report_map, &mut report_map_value)
         .await
     {
         Ok(len) => println!("HID Report Map read: {} bytes", len),
@@ -659,7 +657,8 @@ fn advertisement_is_xbox(data: &[u8]) -> bool {
             AdStructure::CompleteLocalName(name) | AdStructure::ShortenedLocalName(name) => {
                 name == XBOX_NAME
             }
-            AdStructure::ServiceUuids16(uuids) => uuids.contains(&HID_SERVICE_UUID),
+            AdStructure::IncompleteServiceUuids16(uuids)
+            | AdStructure::CompleteServiceUuids16(uuids) => uuids.contains(&HID_SERVICE_UUID),
             _ => false,
         })
 }

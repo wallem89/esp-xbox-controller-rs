@@ -69,7 +69,15 @@ raw BLE HID notifications.
 
 ## Usage
 
-On ESP32-C3, enable the `esp32-c3` feature and pass the BLE controller plus the
+The examples use `esp-hal 1.2.1` and `esp-println 0.18.0`. Until a compatible
+`esp-radio` release is published, they pin the radio and PHY to ESP Git revision
+`dbd951f78c1276461ea3050c2ba71f552a3508ef`. The workspace's ESP Git source patches
+keep their other ESP dependencies on crates.io, including HAL 1.2.1. Copy these
+patches as well as the example dependencies when using a separate workspace.
+TrouBLE is pinned to `290ab2f45392998fa80a098f853ec86ebaa7c99c` to match the
+radio's `bt-hci 0.9` interface.
+
+On ESP32-C3, enable the `esp32c3` feature and pass the BLE controller plus the
 hardware random-number generator to `run`. The callback receives every parsed
 notification and can forward it to an Embassy channel or watch:
 
@@ -110,7 +118,7 @@ project. Stick values are translated from unsigned `0..=65535` to signed
 ## Workspace
 
 - Repository root: publishable `esp-xbox-controller` crate. It re-exports the
-  core state and parser API; the `esp32-c3` feature adds the ESP BLE connection
+  core state and parser API; the `esp32c3` feature adds the ESP BLE connection
   API.
 - `crates/xbox-controller-core`: publishable, transport-independent `no_std`
   parser used by the ESP library and desktop inspector.

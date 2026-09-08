@@ -4,7 +4,6 @@
 use embassy_executor::Spawner;
 use esp_backtrace as _;
 use esp_hal::{
-    interrupt::software::SoftwareInterruptControl,
     rng::{Trng, TrngSource},
     timer::timg::TimerGroup,
 };
@@ -24,8 +23,7 @@ async fn main(_spawner: Spawner) -> ! {
     esp_alloc::heap_allocator!(size: 72 * 1024);
 
     let timer_group = TimerGroup::new(peripherals.TIMG0);
-    let software_interrupts = SoftwareInterruptControl::new(peripherals.SW_INTERRUPT);
-    esp_rtos::start(timer_group.timer0, software_interrupts.software_interrupt0);
+    esp_rtos::start(timer_group.timer0, peripherals.FROM_CPU_INTR0);
 
     let _trng_source = TrngSource::new(peripherals.RNG, peripherals.ADC1);
     let mut random = Trng::try_new().expect("failed to initialize true random generator");

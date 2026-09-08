@@ -19,7 +19,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.104"
-btleplug = "0.12"
+btleplug = "0.13.0"
 bluer = { version = "0.17.4", features = ["bluetoothd"] }
 eframe = "0.36.1"
 egui = "0.36.1"
@@ -31,5 +31,5 @@ tokio = { version = "1.53.1", features = [
     "sync",
     "time",
 ] }
-uuid = "1.24.0"
+uuid = "1.26.0"
 xbox-controller-core = { version = "0.1", path = "../../crates/xbox-controller-core" }

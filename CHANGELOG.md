@@ -2,6 +2,12 @@
 
 All notable changes to `esp-xbox-controller` are documented here.
 
+## [0.3.0] - 2026-09-08
+
+### Changed
+
+- Support for esp-hal 1.2.1
+
 ## [0.2.0] - 2026-08-21
 
 ### Added
