@@ -12,7 +12,7 @@ use esp_hal::{
 };
 use esp_radio::ble::controller::BleConnector;
 use esp_xbox_controller::{ControllerConfig, ControllerSelector, XboxControllerState, run};
-use log::{debug, error, info, trace, warn};
+use log::{error, info, warn};
 use trouble_host::prelude::ExternalController;
 
 esp_bootloader_esp_idf::esp_app_desc!();
