@@ -4,6 +4,10 @@ All notable changes to `esp-xbox-controller` are documented here.
 
 ## [0.3.0] - 2026-09-09
 
+### Added
+
+- Support for encrypted
+
 ### Changed
 
 - Support for esp-hal 1.2.1

@@ -10,16 +10,18 @@ use esp_hal::{
     rng::{Trng, TrngSource},
     timer::timg::TimerGroup,
 };
-use esp_println::println;
 use esp_radio::ble::controller::BleConnector;
 use esp_xbox_controller::{ControllerConfig, ControllerSelector, XboxControllerState, run};
+use log::{debug, error, info, trace, warn};
 use trouble_host::prelude::ExternalController;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
+const CONTROLLER_ADDRESS: [u8; 6] = [0xAC, 0x8E, 0xBD, 0x4D, 0xAF, 0x5A]; // BLE address of xbox controller
+const IDLE_DISCONNECT_TIME: Duration = Duration::from_secs(5 * 60); // After this time inactivity the controller will be disconnected
 const CONTROLLER: ControllerConfig = ControllerConfig::new(
-    ControllerSelector::Address([0xC0, 0xD6, 0xD5, 0xEA, 0xBE, 0x85]),
-    Some(Duration::from_secs(5 * 60)),
+    ControllerSelector::Address(CONTROLLER_ADDRESS),
+    Some(IDLE_DISCONNECT_TIME),
 );
 const CHANNEL_CAPACITY: usize = 8;
 
@@ -42,11 +44,11 @@ async fn controller_task(bt: BT<'static>, _entropy_source: TrngSource<'static>) 
             Ok(state) if previous != Some(state) => {
                 previous = Some(state);
                 if CONTROLLER_STATES.try_send(state).is_err() {
-                    println!("controller state channel full; dropping update");
+                    warn!("controller state channel full; dropping update");
                 }
             }
             Ok(_) => {}
-            Err(error) => println!("input report parse error: {:?}", error),
+            Err(error) => error!("input report parse error: {:?}", error),
         },
     )
     .await
@@ -56,13 +58,17 @@ async fn controller_task(bt: BT<'static>, _entropy_source: TrngSource<'static>) 
 async fn print_task() {
     loop {
         let state = CONTROLLER_STATES.receive().await;
-        println!("controller state: {:?}", state);
+        info!("controller state: {:?}", state);
     }
 }
 
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
     esp_println::logger::init_logger_from_env();
+    info!(
+        "Initializing device with esp32-c3-task-example firmware version {}...",
+        env!("CARGO_PKG_VERSION")
+    );
     let peripherals = esp_hal::init(esp_hal::Config::default());
     esp_alloc::heap_allocator!(size: 72 * 1024);
 

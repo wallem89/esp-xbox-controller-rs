@@ -40,4 +40,5 @@ trouble-host = { git = "https://github.com/embassy-rs/trouble", rev = "290ab2f45
     "scan",
     "security",
 ] }
+log = "0.4.34"
 esp-xbox-controller = { path = "../..", features = ["esp32c3"] }
