@@ -572,6 +572,19 @@ async fn wait_for_pairing<C: Controller, P: PacketPool>(
 ) -> bool {
     loop {
         match connection.next().await {
+            ConnectionEvent::Encrypted { security_level }
+                if matches!(
+                    security_level,
+                    SecurityLevel::Encrypted | SecurityLevel::EncryptedAuthenticated
+                ) =>
+            {
+                // This connection is non-bondable: HID access needs encryption,
+                // not completion of SMP key distribution. Start consuming GATT
+                // traffic now so early reports cannot fill its receive queue
+                // while we wait for a later PairingComplete event.
+                println!("link ready for GATT: {:?}", security_level);
+                return true;
+            }
             ConnectionEvent::PairingComplete {
                 security_level,
                 bond,
