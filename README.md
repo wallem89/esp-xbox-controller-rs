@@ -84,7 +84,7 @@ notification and can forward it to an Embassy channel or watch:
 ```rust,ignore
 use esp_xbox_controller::{ControllerConfig, ControllerSelector, run};
 
-let config = ControllerConfig::new(ControllerSelector::AnyXbox);
+let config = ControllerConfig::new(ControllerSelector::AnyXbox, None);
 run(ble, &mut random, config, |notification| {
     if let Ok(state) = notification {
         // Print state, or send it through an Embassy channel/watch.
@@ -96,7 +96,42 @@ run(ble, &mut random, config, |notification| {
 Select one observed controller with
 `ControllerSelector::Address([0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff])`.
 Set `ControllerConfig::idle_disconnect_after` to disconnect after a period with
-no changed controller state. Its default of `None` keeps the connection alive.
+no changed controller state. Passing `None` keeps the connection alive.
+
+For session-end notifications and held-input activity, use `run_with_events`:
+
+```rust,ignore
+use embassy_time::Duration;
+use esp_xbox_controller::{ControllerConfig, ControllerEvent, ControllerSelector, run_with_events};
+
+let config = ControllerConfig::new(
+    ControllerSelector::AnyXbox,
+    Some(Duration::from_secs(5 * 60)),
+);
+run_with_events(ble, &mut random, config, |state| state.buttons.rb, |event| {
+    match event {
+        ControllerEvent::Report(Ok(state)) => { /* Apply the fresh input state. */ }
+        ControllerEvent::Report(Err(error)) => { /* Handle the malformed report. */ }
+        ControllerEvent::Disconnected => { /* Clear retained input; stop outputs. */ }
+    }
+}).await
+```
+
+The activity predicate suspends idle disconnection while relevant input remains
+held. Releasing it starts a fresh idle period. Changed inactive reports restart
+that period; unchanged inactive reports do not. `run` retains its original
+callback and changed-report idle behavior. Both APIs retain keepalives and the
+30-second idle reconnect cooldown.
+
+`Disconnected` is emitted when the active BLE/GATT/report session ends, before
+reconnect delays. Reconnecting does not replay old input: wait for a fresh report.
+Report silence alone does not signal disconnection. BLE supervision detects a
+lost link; connection setup requests five seconds and accepts peer parameter
+updates. This cannot detect stalled HID processing on a live BLE connection.
+
+Hardware validation should cover holding RB and LB+RB through report silence,
+releasing RB, five-minute idle disconnection, power loss, and fresh input after
+reconnection. Applications controlling outputs must clear them on disconnection.
 
 The report parser remains available independently and without ESP dependencies:
 

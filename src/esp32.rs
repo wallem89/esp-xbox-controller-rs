@@ -59,8 +59,16 @@ impl ControllerConfig {
 
 type Peer = (AddrKind, BdAddr);
 
-/// Connects to the selected controller, reconnecting when necessary, and calls
-/// `on_notification` for every input report received from it.
+/// A report or the end of a usable controller session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ControllerEvent {
+    Input(Result<XboxControllerState, ParseError>),
+    /// Emitted on link loss, idle disconnect, or GATT/report session failure.
+    Disconnected,
+}
+
+/// Connects to the selected controller and forwards every input report.
+/// Idle time is measured since the last changed report, for compatibility.
 pub async fn run<C, F>(
     controller: C,
     random: &mut Trng,
@@ -70,6 +78,36 @@ pub async fn run<C, F>(
 where
     C: Controller + ControllerCmdSync<LeSetScanParams>,
     F: FnMut(Result<XboxControllerState, ParseError>),
+{
+    run_with_events(
+        controller,
+        random,
+        config,
+        |event| {
+            if let ControllerEvent::Input(report) = event {
+                on_notification(report);
+            }
+        },
+        |_| false,
+    )
+    .await
+}
+
+/// Forwards input reports and session termination, including BLE link loss.
+/// `is_active` identifies held inputs that count as ongoing use. While active,
+/// the idle deadline is disabled; returning to inactive starts a fresh deadline.
+/// BLE supervision still detects link loss even when HID reports are silent.
+pub async fn run_with_events<C, F, A>(
+    controller: C,
+    random: &mut Trng,
+    config: ControllerConfig,
+    mut on_event: F,
+    is_active: A,
+) -> !
+where
+    C: Controller + ControllerCmdSync<LeSetScanParams>,
+    F: FnMut(ControllerEvent),
+    A: Fn(&XboxControllerState) -> bool,
 {
     let mut resources: HostResources<C, DefaultPacketPool, CONNECTIONS_MAX, L2CAP_CHANNELS_MAX> =
         HostResources::new();
@@ -194,9 +232,15 @@ where
                 }
             };
 
+            let session_started = Instant::now();
             let idle_disconnect = match select3(
                 client.task(),
-                use_xbox_reports(&client, &mut on_notification, config.idle_disconnect_after),
+                use_xbox_reports(
+                    &client,
+                    &mut on_event,
+                    &is_active,
+                    config.idle_disconnect_after,
+                ),
                 monitor_connection(&stack, &connection),
             )
             .await
@@ -218,6 +262,13 @@ where
                     false
                 }
             };
+            println!(
+                "controller session ended after {} seconds; idle timeout: {}",
+                session_started.elapsed().as_secs(),
+                idle_disconnect
+            );
+            // Notify the application before disconnect/cooldown/reconnect work.
+            on_event(ControllerEvent::Disconnected);
             connection.disconnect();
             if idle_disconnect {
                 println!("waiting for controller shutdown before rescanning");
@@ -279,13 +330,15 @@ async fn monitor_connection<C: Controller, P: PacketPool>(
     }
 }
 
-async fn use_xbox_reports<C: Controller, P: PacketPool, const SERVICES: usize, F>(
+async fn use_xbox_reports<C: Controller, P: PacketPool, const SERVICES: usize, F, A>(
     client: &GattClient<'_, C, P, SERVICES>,
-    on_notification: &mut F,
+    on_event: &mut F,
+    is_active: &A,
     idle_disconnect_after: Option<Duration>,
 ) -> bool
 where
-    F: FnMut(Result<XboxControllerState, ParseError>),
+    F: FnMut(ControllerEvent),
+    A: Fn(&XboxControllerState) -> bool,
 {
     println!("discovering HID service 0x1812");
     let services = match client.services_by_uuid(&Uuid::new_short(0x1812)).await {
@@ -414,12 +467,66 @@ where
 
     // Keep the discovered table alive for the session because its writable
     // Report characteristic is also used for idle keepalives.
-    let hid_characteristics = client.characteristics::<16>(hid).await.ok();
-    let output_report = hid_characteristics.as_ref().and_then(|characteristics| {
-        characteristics
-            .iter()
-            .find(|characteristic| characteristic.props.any(&[CharacteristicProp::Write]))
-    });
+    let hid_characteristics = match client.characteristics::<16>(hid).await {
+        Ok(characteristics) => Some(characteristics),
+        Err(error) => {
+            println!(
+                "WARNING: keepalive characteristic discovery failed: {:?}",
+                error
+            );
+            None
+        }
+    };
+    let mut output_report = None;
+    if let Some(characteristics) = hid_characteristics.as_ref() {
+        for characteristic in characteristics {
+            if characteristic.uuid != Uuid::new_short(0x2a4d)
+                || !characteristic.props.any(&[CharacteristicProp::Write])
+            {
+                continue;
+            }
+            // HID Report Reference: report ID 3, report type 2 (Output).
+            // Protocol Mode and other writable attributes are not rumble reports.
+            let descriptor: Descriptor<[u8]> = match client
+                .descriptor_by_uuid(characteristic, &Uuid::new_short(0x2908))
+                .await
+            {
+                Ok(descriptor) => descriptor,
+                Err(error) => {
+                    println!(
+                        "Report Reference discovery failed for 0x{:04x}: {:?}",
+                        characteristic.handle, error
+                    );
+                    continue;
+                }
+            };
+            let mut reference = [0_u8; 2];
+            match client.read_descriptor(&descriptor, &mut reference).await {
+                Ok(2) if reference == [3, 2] => {
+                    output_report = Some(characteristic);
+                    break;
+                }
+                Ok(len) => println!(
+                    "skipping report 0x{:04x}: reference {:?}, length {}",
+                    characteristic.handle, reference, len
+                ),
+                Err(error) => println!(
+                    "Report Reference read failed for 0x{:04x}: {:?}",
+                    characteristic.handle, error
+                ),
+            }
+        }
+    }
+    match output_report {
+        Some(report) => println!(
+            "idle keepalive handle 0x{:04x}, interval {} seconds",
+            report.handle,
+            HID_IDLE_KEEPALIVE_INTERVAL.as_secs()
+        ),
+        None => {
+            println!("WARNING: no writable HID output characteristic; idle keepalives disabled")
+        }
+    }
     play_connection_rumble(client, output_report).await;
 
     println!("ready; move a stick or press a button");
@@ -431,42 +538,51 @@ where
         None => println!("idle disconnect disabled"),
     }
     let mut previous_state = None;
-    let mut idle_deadline = idle_disconnect_after.map(|duration| Instant::now() + duration);
+    let mut idle = crate::idle::IdleTimeout::new(
+        Instant::now().as_ticks(),
+        idle_disconnect_after.map(|duration| duration.as_ticks()),
+    );
     let mut keepalive_deadline = Instant::now() + HID_IDLE_KEEPALIVE_INTERVAL;
 
     loop {
-        let next_timer = idle_deadline
-            .map(|idle| idle.min(keepalive_deadline))
+        let next_timer = idle
+            .deadline()
+            .map(|deadline| Instant::from_ticks(deadline).min(keepalive_deadline))
             .unwrap_or(keepalive_deadline);
         match select(Timer::at(next_timer), notifications.next()).await {
             Either::First(()) => {
                 let now = Instant::now();
-                if idle_deadline.is_some_and(|deadline| now >= deadline) {
+                if idle.expired(now.as_ticks()) {
                     return true;
                 }
-                if let Some(output_report) = output_report
-                    && let Err(error) = client
-                        .write_characteristic_without_response(
-                            output_report,
-                            &IDLE_KEEPALIVE_REPORT,
-                        )
+                if let Some(output_report) = output_report {
+                    match client
+                        .write_characteristic(output_report, &IDLE_KEEPALIVE_REPORT)
                         .await
-                {
-                    println!("WARNING: controller keepalive write failed: {:?}", error);
-                    return false;
+                    {
+                        Ok(()) => println!(
+                            "controller keepalive acknowledged at {} ms",
+                            Instant::now().as_millis()
+                        ),
+                        Err(error) => {
+                            println!("WARNING: controller keepalive write failed: {:?}", error);
+                            return false;
+                        }
+                    }
                 }
                 keepalive_deadline = Instant::now() + HID_IDLE_KEEPALIVE_INTERVAL;
             }
             Either::Second(notification) => {
                 let parsed = parse_input_report(notification.as_ref());
-                if parsed
-                    .as_ref()
-                    .is_ok_and(|state| Some(*state) != previous_state)
-                {
-                    previous_state = parsed.as_ref().ok().copied();
-                    idle_deadline = idle_disconnect_after.map(|duration| Instant::now() + duration);
+                if let Ok(state) = parsed.as_ref() {
+                    idle.report(
+                        Instant::now().as_ticks(),
+                        Some(*state) != previous_state,
+                        is_active(state),
+                    );
+                    previous_state = Some(*state);
                 }
-                on_notification(parsed);
+                on_event(ControllerEvent::Input(parsed));
             }
         }
     }
@@ -524,7 +640,7 @@ async fn play_connection_rumble<C: Controller, P: PacketPool, const SERVICES: us
         output_report.handle
     );
     match client
-        .write_characteristic_without_response(output_report, &CONNECTED_PULSE)
+        .write_characteristic(output_report, &CONNECTED_PULSE)
         .await
     {
         Ok(()) => {}

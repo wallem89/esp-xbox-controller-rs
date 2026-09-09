@@ -1,5 +1,5 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = [
     ".",
     "crates/xbox-controller-core",
@@ -73,6 +73,9 @@ trouble-host = { version = "0.6", git = "https://github.com/embassy-rs/trouble",
     "scan",
     "security",
 ], optional = true }
+
+[profile.dev]
+opt-level = "s"
 
 [profile.release]
 codegen-units = 1
