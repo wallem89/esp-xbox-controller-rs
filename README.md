@@ -69,14 +69,27 @@ raw BLE HID notifications.
 
 ## Usage
 
-On ESP32-C3, enable the `esp32-c3` feature and pass the BLE controller plus the
+The examples use `esp-hal 1.2.1` and `esp-println 0.18.0`. Until a compatible
+`esp-radio` release is published, they pin the radio and PHY to ESP Git revision
+`dbd951f78c1276461ea3050c2ba71f552a3508ef`. The workspace's ESP Git source patches
+keep their other ESP dependencies on crates.io, including HAL 1.2.1. Copy these
+patches as well as the example dependencies when using a separate workspace.
+TrouBLE is pinned to `290ab2f45392998fa80a098f853ec86ebaa7c99c` to match the
+radio's `bt-hci 0.9` interface.
+
+On ESP32-C3, enable the `esp32c3` feature and pass the BLE controller plus the
 hardware random-number generator to `run`. The callback receives every parsed
 notification and can forward it to an Embassy channel or watch:
 
 ```rust,ignore
+use embassy_time::Duration;
 use esp_xbox_controller::{ControllerConfig, ControllerSelector, run};
 
-let config = ControllerConfig::new(ControllerSelector::AnyXbox);
+let config = ControllerConfig::new(
+    ControllerSelector::AnyXbox,
+    None,
+    Duration::from_millis(500),
+);
 run(ble, &mut random, config, |notification| {
     if let Ok(state) = notification {
         // Print state, or send it through an Embassy channel/watch.
@@ -88,7 +101,63 @@ run(ble, &mut random, config, |notification| {
 Select one observed controller with
 `ControllerSelector::Address([0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff])`.
 Set `ControllerConfig::idle_disconnect_after` to disconnect after a period with
-no changed controller state. Its default of `None` keeps the connection alive.
+no changed controller state. Passing `None` disables this idle disconnect.
+
+Set the BLE link-loss timeout with the third argument to `ControllerConfig::new`:
+
+```rust,ignore
+use embassy_time::Duration;
+use esp_xbox_controller::{ControllerConfig, ControllerSelector};
+
+const CONFIG: ControllerConfig = ControllerConfig::new(
+    ControllerSelector::AnyXbox,
+    Some(Duration::from_secs(5 * 60)),
+    Duration::from_millis(500),
+);
+```
+
+The supervision timeout must be 100–32000 ms in multiples
+of 10 ms; `run` and `run_with_events` panic on invalid values. The configured
+value applies during connection setup, pairing, and subsequent parameter updates.
+Updates whose interval and latency are incompatible with this timeout are rejected.
+This detects missing BLE packets, independently of controller input activity;
+application scheduling and message delivery add to the final disconnect response time.
+
+For session-end notifications and held-input activity, use `run_with_events`:
+
+```rust,ignore
+use embassy_time::Duration;
+use esp_xbox_controller::{ControllerConfig, ControllerEvent, ControllerSelector, run_with_events};
+
+let config = ControllerConfig::new(
+    ControllerSelector::AnyXbox,
+    Some(Duration::from_secs(5 * 60)),
+    Duration::from_millis(500),
+);
+run_with_events(ble, &mut random, config, |state| state.buttons.rb, |event| {
+    match event {
+        ControllerEvent::Report(Ok(state)) => { /* Apply the fresh input state. */ }
+        ControllerEvent::Report(Err(error)) => { /* Handle the malformed report. */ }
+        ControllerEvent::Disconnected => { /* Clear retained input; stop outputs. */ }
+    }
+}).await
+```
+
+The activity predicate suspends idle disconnection while relevant input remains
+held. Releasing it starts a fresh idle period. Changed inactive reports restart
+that period; unchanged inactive reports do not. `run` retains its original
+callback and changed-report idle behavior. Both APIs retain keepalives and the
+30-second idle reconnect cooldown.
+
+`Disconnected` is emitted when the active BLE/GATT/report session ends, before
+reconnect delays. Reconnecting does not replay old input: wait for a fresh report.
+Report silence alone does not signal disconnection. BLE supervision detects a
+lost link; connection setup and peer parameter updates use the configured
+supervision timeout. This cannot detect stalled HID processing on a live BLE connection.
+
+Hardware validation should cover holding RB and LB+RB through report silence,
+releasing RB, five-minute idle disconnection, power loss, and fresh input after
+reconnection. Applications controlling outputs must clear them on disconnection.
 
 The report parser remains available independently and without ESP dependencies:
 
@@ -110,7 +179,7 @@ project. Stick values are translated from unsigned `0..=65535` to signed
 ## Workspace
 
 - Repository root: publishable `esp-xbox-controller` crate. It re-exports the
-  core state and parser API; the `esp32-c3` feature adds the ESP BLE connection
+  core state and parser API; the `esp32c3` feature adds the ESP BLE connection
   API.
 - `crates/xbox-controller-core`: publishable, transport-independent `no_std`
   parser used by the ESP library and desktop inspector.

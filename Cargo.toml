@@ -1,5 +1,5 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = [
     ".",
     "crates/xbox-controller-core",
@@ -10,10 +10,10 @@ members = [
 default-members = [".", "tools/xbox-controller-inspector"]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-rust-version = "1.96.0"
+rust-version = "1.98.0"
 repository = "https://github.com/wallem89/esp-xbox-controller-rs"
 
 [package]
@@ -43,38 +43,55 @@ include = [
 
 [features]
 default = []
-esp32-c3 = [
+esp32c3 = [
     "dep:bt-hci",
     "dep:embassy-futures",
     "dep:embassy-sync",
     "dep:embassy-time",
     "dep:esp-hal",
     "dep:esp-println",
+    "dep:log",
     "dep:trouble-host",
 ]
 
 [dependencies]
 xbox-controller-core = { version = "0.1", path = "crates/xbox-controller-core" }
-bt-hci = { version = "0.8", optional = true }
+bt-hci = { version = "0.9", optional = true }
 embassy-futures = { version = "0.1", optional = true }
 embassy-sync = { version = "0.8", optional = true }
 embassy-time = { version = "0.5", optional = true }
-esp-hal = { version = "1.1", features = [
+esp-hal = { version = "1.2.1", features = [
     "esp32c3",
     "unstable",
 ], optional = true }
-esp-println = { version = "0.17", features = [
+esp-println = { version = "0.18.0", features = [
     "esp32c3",
     "log-04",
 ], optional = true }
-trouble-host = { version = "0.6", git = "https://github.com/embassy-rs/trouble", rev = "fad811b", features = [
+trouble-host = { version = "0.6", git = "https://github.com/embassy-rs/trouble", rev = "290ab2f45392998fa80a098f853ec86ebaa7c99c", features = [
     "default-packet-pool-mtu-255",
     "log",
     "scan",
     "security",
 ], optional = true }
+log = { version = "0.4", optional = true }
+
+[profile.dev]
+opt-level = "s"
 
 [profile.release]
 codegen-units = 1
 lto = "fat"
 opt-level = "s"
+
+# Keep the unreleased radio on published ESP dependencies, including HAL 1.2.1.
+[patch."https://github.com/esp-rs/esp-hal"]
+esp-hal = { version = "=1.2.1" }
+esp-radio-rtos-driver = { version = "0.4.1" }
+esp-alloc = { version = "0.11.0" }
+esp-config = { version = "0.8.0" }
+esp-metadata-generated = { version = "0.5.1" }
+esp-rom-sys = { version = "=0.1.5" }
+esp-sync = { version = "0.3.0" }
+esp-hal-procmacros = { version = "0.23.0" }
+xtensa-lx-rt = { version = "0.23.0" }
