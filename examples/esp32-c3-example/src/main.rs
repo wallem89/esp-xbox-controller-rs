@@ -2,6 +2,7 @@
 #![no_main]
 
 use embassy_executor::Spawner;
+use embassy_time::Duration;
 use esp_backtrace as _;
 use esp_hal::{
     rng::{Trng, TrngSource},
@@ -14,7 +15,11 @@ use trouble_host::prelude::ExternalController;
 
 esp_bootloader_esp_idf::esp_app_desc!();
 
-const CONTROLLER: ControllerConfig = ControllerConfig::new(ControllerSelector::AnyXbox, None);
+const CONTROLLER: ControllerConfig = ControllerConfig::new(
+    ControllerSelector::AnyXbox,
+    None,
+    Duration::from_millis(10000),
+);
 
 #[esp_rtos::main]
 async fn main(_spawner: Spawner) -> ! {

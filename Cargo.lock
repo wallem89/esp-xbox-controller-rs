@@ -2221,6 +2221,7 @@ name = "esp32-c3-example"
 version = "0.3.0"
 dependencies = [
  "embassy-executor",
+ "embassy-time",
  "esp-alloc",
  "esp-backtrace",
  "esp-bootloader-esp-idf",

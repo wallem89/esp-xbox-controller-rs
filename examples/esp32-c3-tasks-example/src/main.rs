@@ -19,9 +19,11 @@ esp_bootloader_esp_idf::esp_app_desc!();
 
 const CONTROLLER_ADDRESS: [u8; 6] = [0xAC, 0x8E, 0xBD, 0x4D, 0xAF, 0x5A]; // BLE address of xbox controller
 const IDLE_DISCONNECT_TIME: Duration = Duration::from_secs(5 * 60); // After this time inactivity the controller will be disconnected
+const SUPERVISION_TIMEOUT: Duration = Duration::from_millis(1000);
 const CONTROLLER: ControllerConfig = ControllerConfig::new(
     ControllerSelector::Address(CONTROLLER_ADDRESS),
     Some(IDLE_DISCONNECT_TIME),
+    SUPERVISION_TIMEOUT,
 );
 const CHANNEL_CAPACITY: usize = 8;
 

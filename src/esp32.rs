@@ -42,17 +42,24 @@ pub struct ControllerConfig {
     /// Disconnect after this much time without a changed input report.
     /// `None` keeps the controller awake indefinitely.
     pub idle_disconnect_after: Option<Duration>,
+    /// Time without BLE packets before the link is considered lost.
+    /// Must be 100 ms through 32 seconds, in multiples of 10 ms.
+    /// Independent of input inactivity; incompatible parameter updates are rejected.
+    pub supervision_timeout: Duration,
 }
 
 impl ControllerConfig {
-    /// Creates a configuration that keeps the selected controller connected.
+    /// Creates a configuration with separate input-idle and BLE link-loss timeouts.
+    /// See [`Self::supervision_timeout`] for the allowed supervision timeout values.
     pub const fn new(
         selector: ControllerSelector,
         idle_disconnect_after: Option<Duration>,
+        supervision_timeout: Duration,
     ) -> Self {
         Self {
             selector,
             idle_disconnect_after,
+            supervision_timeout,
         }
     }
 }
@@ -71,6 +78,10 @@ pub enum ControllerEvent {
 
 /// Connects to the selected controller and forwards every input report.
 /// Idle time is measured since the last changed report, for compatibility.
+///
+/// # Panics
+/// Panics if the configured supervision timeout is outside 100–32000 ms or
+/// is not a multiple of 10 ms.
 pub async fn run<C, F>(
     controller: C,
     random: &mut Trng,
@@ -99,6 +110,10 @@ where
 /// `is_active` identifies held inputs that count as ongoing use. While active,
 /// the idle deadline is disabled; returning to inactive starts a fresh deadline.
 /// BLE supervision still detects link loss even when HID reports are silent.
+///
+/// # Panics
+/// Panics if the configured supervision timeout is outside 100–32000 ms or
+/// is not a multiple of 10 ms.
 pub async fn run_with_events<C, F, A>(
     controller: C,
     random: &mut Trng,
@@ -111,6 +126,14 @@ where
     F: FnMut(ControllerEvent),
     A: Fn(&XboxControllerState) -> bool,
 {
+    assert!(
+        config.supervision_timeout >= Duration::from_millis(100)
+            && config.supervision_timeout <= Duration::from_secs(32)
+            && config.supervision_timeout.as_millis().is_multiple_of(10)
+            && config.supervision_timeout
+                == Duration::from_millis(config.supervision_timeout.as_millis()),
+        "supervision_timeout must be 100–32000 ms in multiples of 10 ms"
+    );
     let mut resources: HostResources<C, DefaultPacketPool, CONNECTIONS_MAX, L2CAP_CHANNELS_MAX> =
         HostResources::new();
     let stack = trouble_host::new(controller, &mut resources)
@@ -159,7 +182,7 @@ where
                     max_latency: 0,
                     min_event_length: Duration::from_secs(0),
                     max_event_length: Duration::from_secs(0),
-                    supervision_timeout: Duration::from_secs(5),
+                    supervision_timeout: config.supervision_timeout,
                 },
                 scan_config: ScanConfig {
                     filter_accept_list: &filter,
@@ -201,7 +224,7 @@ where
             }
             match with_timeout(
                 Duration::from_secs(20),
-                wait_for_pairing(&stack, &connection),
+                wait_for_pairing(&stack, &connection, config.supervision_timeout),
             )
             .await
             {
@@ -243,7 +266,7 @@ where
                     &is_active,
                     config.idle_disconnect_after,
                 ),
-                monitor_connection(&stack, &connection),
+                monitor_connection(&stack, &connection, config.supervision_timeout),
             )
             .await
             {
@@ -289,12 +312,26 @@ where
 async fn monitor_connection<C: Controller, P: PacketPool>(
     stack: &Stack<'_, C, P>,
     connection: &Connection<'_, P>,
+    supervision_timeout: Duration,
 ) {
     loop {
         match connection.next().await {
             ConnectionEvent::RequestConnectionParams(request) => {
                 info!("controller requested connection parameter update");
-                match request.accept(None, stack).await {
+                let mut params = request.params().clone();
+                params.supervision_timeout = supervision_timeout;
+                if !params.is_valid() {
+                    warn!(
+                        "rejecting connection parameters incompatible with {} ms supervision timeout",
+                        supervision_timeout.as_millis()
+                    );
+                    if let Err(error) = request.reject(stack).await {
+                        error!("connection parameter rejection failed: {:?}", error);
+                        return;
+                    }
+                    continue;
+                }
+                match request.accept(Some(&params), stack).await {
                     Ok(()) => info!("connection parameter update accepted"),
                     Err(error) => {
                         error!("connection parameter update failed: {:?}", error);
@@ -687,6 +724,7 @@ where
 async fn wait_for_pairing<C: Controller, P: PacketPool>(
     stack: &Stack<'_, C, P>,
     connection: &Connection<'_, P>,
+    supervision_timeout: Duration,
 ) -> bool {
     loop {
         match connection.next().await {
@@ -726,7 +764,21 @@ async fn wait_for_pairing<C: Controller, P: PacketPool>(
                 return false;
             }
             ConnectionEvent::RequestConnectionParams(request) => {
-                if let Err(error) = request.accept(None, stack).await {
+                let mut params = request.params().clone();
+                params.supervision_timeout = supervision_timeout;
+                if !params.is_valid() {
+                    warn!(
+                        "rejecting connection parameters incompatible with {} ms supervision timeout",
+                        supervision_timeout.as_millis()
+                    );
+                    if let Err(error) = request.reject(stack).await {
+                        warn!("connection parameter rejection failed: {:?}", error);
+                        connection.disconnect();
+                        return false;
+                    }
+                    continue;
+                }
+                if let Err(error) = request.accept(Some(&params), stack).await {
                     warn!(
                         "connection parameter update failed: {:?}; reconnecting",
                         error

@@ -92,7 +92,13 @@ powers off.
 The example defaults to:
 
 ```rust
-const CONTROLLER: ControllerConfig = ControllerConfig::new(ControllerSelector::AnyXbox);
+use embassy_time::Duration;
+
+const CONTROLLER: ControllerConfig = ControllerConfig::new(
+    ControllerSelector::AnyXbox,
+    None,
+    Duration::from_millis(500),
+);
 ```
 
 This selects the first compatible advertisement. For a simple setup, put only
@@ -103,6 +109,8 @@ To restrict initial discovery to one observed BLE address, change it to:
 ```rust
 const CONTROLLER: ControllerConfig = ControllerConfig::new(
     ControllerSelector::Address([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]),
+    None,
+    Duration::from_millis(500),
 );
 ```
 
