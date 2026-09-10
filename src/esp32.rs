@@ -62,6 +62,8 @@ type Peer = (AddrKind, BdAddr);
 /// A report or the end of a usable controller session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ControllerEvent {
+    /// Emitted when the controller successfully connects.
+    Connected,
     Input(Result<XboxControllerState, ParseError>),
     /// Emitted on link loss, idle disconnect, or GATT/report session failure.
     Disconnected,
@@ -464,6 +466,9 @@ where
             return false;
         }
     };
+
+    // Set connected
+    on_event(ControllerEvent::Connected);
 
     // Keep the discovered table alive for the session because its writable
     // Report characteristic is also used for idle keepalives.
