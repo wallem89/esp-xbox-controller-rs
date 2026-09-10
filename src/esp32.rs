@@ -6,7 +6,7 @@ use embassy_futures::{
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, signal::Signal};
 use embassy_time::{Duration, Instant, Timer, with_timeout};
 use esp_hal::rng::Trng;
-use esp_println::println;
+use log::{error, info, warn};
 use trouble_host::prelude::*;
 
 use crate::{ParseError, XboxControllerState, parse_input_report};
@@ -126,11 +126,11 @@ where
     join(runner.run_with_handler(&finder), async {
         let mut attempt: u32 = 0;
         loop {
-            println!("scanning for Xbox Wireless Controller (HID 0x1812)");
+            info!("scanning for Xbox Wireless Controller (HID 0x1812)");
             let (returned_central, target) = scan_for_xbox(central, &found).await;
             central = returned_central;
             let Some(target) = target else {
-                println!("scan failed; retrying in 1 second");
+                warn!("scan failed; retrying in 1 second");
                 embassy_time::Timer::after_secs(1).await;
                 continue;
             };
@@ -139,7 +139,7 @@ where
                 addr: target.1,
             };
             attempt = attempt.wrapping_add(1);
-            println!("connection attempt {} to {}", attempt, target_address);
+            info!("connection attempt {} to {}", attempt, target_address);
 
             // Let the controller and host controller settle after active scan
             // cancellation. Model 1708 is unreliable when LE Create Connection
@@ -167,12 +167,12 @@ where
             let connection = match central.connect(&connection_config).await {
                 Ok(connection) => connection,
                 Err(error) => {
-                    println!("BLE connection failed: {:?}; rescanning", error);
+                    error!("BLE connection failed: {:?}; rescanning", error);
                     embassy_time::Timer::after_secs(1).await;
                     continue;
                 }
             };
-            println!("connected; starting pairing/encryption");
+            info!("connected; starting pairing/encryption");
 
             // Give the first connection event time to complete before sending
             // SMP traffic. Debug logging previously supplied this delay by
@@ -183,7 +183,7 @@ where
             // the matching key in ESP32 flash. A controller-only bond becomes
             // stale whenever the board resets and loses TrouBLE's RAM state.
             if let Err(error) = connection.set_bondable(false) {
-                println!(
+                error!(
                     "could not configure non-bondable pairing: {:?}; reconnecting",
                     error
                 );
@@ -192,7 +192,7 @@ where
                 continue;
             }
             if let Err(error) = connection.request_security() {
-                println!("could not request link security: {:?}; reconnecting", error);
+                error!("could not request link security: {:?}; reconnecting", error);
                 connection.disconnect();
                 embassy_time::Timer::after_secs(1).await;
                 continue;
@@ -209,14 +209,14 @@ where
                     continue;
                 }
                 Err(_) => {
-                    println!("application pairing deadline reached after 20000 ms");
+                    error!("application pairing deadline reached after 20000 ms");
                     connection.disconnect();
                     embassy_time::Timer::after_secs(1).await;
                     continue;
                 }
             }
 
-            println!("creating GATT client");
+            info!("creating GATT client");
             let client = match GattClient::<C, DefaultPacketPool, GATT_SERVICES_MAX>::new(
                 &stack,
                 &connection,
@@ -225,7 +225,7 @@ where
             {
                 Ok(client) => client,
                 Err(error) => {
-                    println!("could not create GATT client: {:?}; reconnecting", error);
+                    error!("could not create GATT client: {:?}; reconnecting", error);
                     connection.disconnect();
                     embassy_time::Timer::after_secs(1).await;
                     continue;
@@ -246,23 +246,23 @@ where
             .await
             {
                 Either3::First(result) => {
-                    println!("GATT client stopped: {:?}", result);
+                    info!("GATT client stopped: {:?}", result);
                     false
                 }
                 Either3::Second(idle_disconnect) => {
                     if idle_disconnect {
-                        println!("controller idle timeout reached; disconnecting");
+                        info!("controller idle timeout reached; disconnecting");
                     } else {
-                        println!("Xbox report session stopped");
+                        info!("Xbox report session stopped");
                     }
                     idle_disconnect
                 }
                 Either3::Third(()) => {
-                    println!("BLE connection event task stopped");
+                    info!("BLE connection event task stopped");
                     false
                 }
             };
-            println!(
+            info!(
                 "controller session ended after {} seconds; idle timeout: {}",
                 session_started.elapsed().as_secs(),
                 idle_disconnect
@@ -271,10 +271,10 @@ where
             on_event(ControllerEvent::Disconnected);
             connection.disconnect();
             if idle_disconnect {
-                println!("waiting for controller shutdown before rescanning");
+                info!("waiting for controller shutdown before rescanning");
                 Timer::after(IDLE_DISCONNECT_COOLDOWN).await;
             } else {
-                println!("connection ended; rescanning in 1 second");
+                info!("connection ended; rescanning in 1 second");
                 Timer::after_secs(1).await;
             }
         }
@@ -291,41 +291,41 @@ async fn monitor_connection<C: Controller, P: PacketPool>(
     loop {
         match connection.next().await {
             ConnectionEvent::RequestConnectionParams(request) => {
-                println!("controller requested connection parameter update");
+                info!("controller requested connection parameter update");
                 match request.accept(None, stack).await {
-                    Ok(()) => println!("connection parameter update accepted"),
+                    Ok(()) => info!("connection parameter update accepted"),
                     Err(error) => {
-                        println!("connection parameter update failed: {:?}", error);
+                        error!("connection parameter update failed: {:?}", error);
                         return;
                     }
                 }
             }
             ConnectionEvent::Disconnected { reason } => {
-                println!("controller disconnected: {:?}", reason);
+                info!("controller disconnected: {:?}", reason);
                 return;
             }
             ConnectionEvent::PairingComplete { security_level, .. } => {
-                println!("security changed: {:?}", security_level)
+                info!("security changed: {:?}", security_level)
             }
             ConnectionEvent::PairingFailed(error) => {
-                println!("pairing/security update failed: {:?}", error);
+                error!("pairing/security update failed: {:?}", error);
                 return;
             }
             ConnectionEvent::PassKeyDisplay(passkey) => {
-                println!("pairing passkey: {}", passkey)
+                info!("pairing passkey: {}", passkey)
             }
             ConnectionEvent::PassKeyConfirm(passkey) => {
-                println!("confirming pairing passkey: {}", passkey);
+                info!("confirming pairing passkey: {}", passkey);
                 if let Err(error) = connection.pass_key_confirm() {
-                    println!("passkey confirmation failed: {:?}", error);
+                    error!("passkey confirmation failed: {:?}", error);
                     return;
                 }
             }
             ConnectionEvent::PassKeyInput => {
-                println!("controller requested unsupported passkey input");
+                error!("controller requested unsupported passkey input");
                 return;
             }
-            event => println!("post-pairing connection event: {:?}", event),
+            event => info!("post-pairing connection event: {:?}", event),
         }
     }
 }
@@ -340,30 +340,30 @@ where
     F: FnMut(ControllerEvent),
     A: Fn(&XboxControllerState) -> bool,
 {
-    println!("discovering HID service 0x1812");
+    info!("discovering HID service 0x1812");
     let services = match client.services_by_uuid(&Uuid::new_short(0x1812)).await {
         Ok(services) => services,
         Err(error) => {
-            println!("HID service discovery failed: {:?}", error);
+            error!("HID service discovery failed: {:?}", error);
             return false;
         }
     };
     let Some(hid) = services.first() else {
-        println!("controller has no HID service");
+        error!("controller has no HID service");
         return false;
     };
 
     // Perform the normal HID-over-GATT enumeration reads before subscribing.
     // The working NimBLE reference reads every readable HID characteristic;
     // these two reads, plus the input Report read below, reproduce that setup.
-    println!("reading HID Information 0x2A4A");
+    info!("reading HID Information 0x2A4A");
     let hid_information: Characteristic<[u8]> = match client
         .characteristic_by_uuid(hid, &Uuid::new_short(0x2a4a))
         .await
     {
         Ok(characteristic) => characteristic,
         Err(error) => {
-            println!("HID Information discovery failed: {:?}", error);
+            error!("HID Information discovery failed: {:?}", error);
             return false;
         }
     };
@@ -372,25 +372,25 @@ where
         .read_characteristic(&hid_information, &mut hid_information_value)
         .await
     {
-        Ok(len) => println!(
+        Ok(len) => info!(
             "HID Information ({} bytes): {:02x?}",
             len,
             &hid_information_value[..len]
         ),
         Err(error) => {
-            println!("HID Information read failed: {:?}", error);
+            error!("HID Information read failed: {:?}", error);
             return false;
         }
     }
 
-    println!("reading HID Report Map 0x2A4B");
+    info!("reading HID Report Map 0x2A4B");
     let report_map: Characteristic<[u8]> = match client
         .characteristic_by_uuid(hid, &Uuid::new_short(0x2a4b))
         .await
     {
         Ok(characteristic) => characteristic,
         Err(error) => {
-            println!("HID Report Map discovery failed: {:?}", error);
+            error!("HID Report Map discovery failed: {:?}", error);
             return false;
         }
     };
@@ -399,23 +399,23 @@ where
         .read_characteristic(&report_map, &mut report_map_value)
         .await
     {
-        Ok(len) => println!("HID Report Map read: {} bytes", len),
+        Ok(len) => info!("HID Report Map read: {} bytes", len),
         Err(error) => {
-            println!("HID Report Map read failed: {:?}", error);
+            error!("HID Report Map read failed: {:?}", error);
             return false;
         }
     }
 
     initialize_hid_host(client, hid).await;
 
-    println!("discovering HID Report characteristic 0x2A4D");
+    info!("discovering HID Report characteristic 0x2A4D");
     let report: Characteristic<[u8]> = match client
         .characteristic_by_uuid(hid, &Uuid::new_short(0x2a4d))
         .await
     {
         Ok(report) => report,
         Err(error) => {
-            println!("Report characteristic discovery failed: {:?}", error);
+            error!("Report characteristic discovery failed: {:?}", error);
             return false;
         }
     };
@@ -423,7 +423,7 @@ where
     // Xbox controllers require the Report value to be read before the CCCD
     // subscription is enabled. Some firmwares return an empty first read, so
     // retry that case once.
-    println!(
+    info!(
         "selected Report handle 0x{:04x}, CCCD {:?}",
         report.handle, report.cccd_handle
     );
@@ -434,7 +434,7 @@ where
     {
         Ok(len) => len,
         Err(error) => {
-            println!("initial Report read failed: {:?}", error);
+            error!("initial Report read failed: {:?}", error);
             return false;
         }
     };
@@ -445,22 +445,22 @@ where
         {
             Ok(len) => len,
             Err(error) => {
-                println!("second initial Report read failed: {:?}", error);
+                error!("second initial Report read failed: {:?}", error);
                 return false;
             }
         };
     }
-    println!(
+    info!(
         "initial Report value ({} bytes): {:02x?}",
         initial_len,
         &initial_report[..initial_len]
     );
 
-    println!("subscribing to input notifications");
+    info!("subscribing to input notifications");
     let mut notifications = match client.subscribe(&report, false).await {
         Ok(notifications) => notifications,
         Err(error) => {
-            println!("input notification subscription failed: {:?}", error);
+            error!("input notification subscription failed: {:?}", error);
             return false;
         }
     };
@@ -470,10 +470,7 @@ where
     let hid_characteristics = match client.characteristics::<16>(hid).await {
         Ok(characteristics) => Some(characteristics),
         Err(error) => {
-            println!(
-                "WARNING: keepalive characteristic discovery failed: {:?}",
-                error
-            );
+            warn!("keepalive characteristic discovery failed: {:?}", error);
             None
         }
     };
@@ -493,7 +490,7 @@ where
             {
                 Ok(descriptor) => descriptor,
                 Err(error) => {
-                    println!(
+                    error!(
                         "Report Reference discovery failed for 0x{:04x}: {:?}",
                         characteristic.handle, error
                     );
@@ -506,11 +503,11 @@ where
                     output_report = Some(characteristic);
                     break;
                 }
-                Ok(len) => println!(
+                Ok(len) => info!(
                     "skipping report 0x{:04x}: reference {:?}, length {}",
                     characteristic.handle, reference, len
                 ),
-                Err(error) => println!(
+                Err(error) => error!(
                     "Report Reference read failed for 0x{:04x}: {:?}",
                     characteristic.handle, error
                 ),
@@ -518,24 +515,24 @@ where
         }
     }
     match output_report {
-        Some(report) => println!(
+        Some(report) => info!(
             "idle keepalive handle 0x{:04x}, interval {} seconds",
             report.handle,
             HID_IDLE_KEEPALIVE_INTERVAL.as_secs()
         ),
         None => {
-            println!("WARNING: no writable HID output characteristic; idle keepalives disabled")
+            warn!("no writable HID output characteristic; idle keepalives disabled")
         }
     }
     play_connection_rumble(client, output_report).await;
 
-    println!("ready; move a stick or press a button");
+    info!("ready; move a stick or press a button");
     match idle_disconnect_after {
-        Some(duration) => println!(
+        Some(duration) => info!(
             "idle disconnect configured for {} seconds",
             duration.as_secs()
         ),
-        None => println!("idle disconnect disabled"),
+        None => info!("idle disconnect disabled"),
     }
     let mut previous_state = None;
     let mut idle = crate::idle::IdleTimeout::new(
@@ -560,12 +557,12 @@ where
                         .write_characteristic(output_report, &IDLE_KEEPALIVE_REPORT)
                         .await
                     {
-                        Ok(()) => println!(
+                        Ok(()) => info!(
                             "controller keepalive acknowledged at {} ms",
                             Instant::now().as_millis()
                         ),
                         Err(error) => {
-                            println!("WARNING: controller keepalive write failed: {:?}", error);
+                            warn!("controller keepalive write failed: {:?}", error);
                             return false;
                         }
                     }
@@ -627,7 +624,7 @@ async fn play_connection_rumble<C: Controller, P: PacketPool, const SERVICES: us
     output_report: Option<&Characteristic<[u8]>>,
 ) {
     let Some(output_report) = output_report else {
-        println!("WARNING: controller has no writable HID output Report");
+        warn!("controller has no writable HID output Report");
         return;
     };
 
@@ -635,7 +632,7 @@ async fn play_connection_rumble<C: Controller, P: PacketPool, const SERVICES: us
     // GATT characteristic and is not included in the value): select all four
     // motors, 50% power, active for 0.20 seconds, no repeat.
     const CONNECTED_PULSE: [u8; 8] = [0x0f, 50, 50, 50, 50, 20, 0, 0];
-    println!(
+    info!(
         "playing connection rumble via handle 0x{:04x}",
         output_report.handle
     );
@@ -645,7 +642,7 @@ async fn play_connection_rumble<C: Controller, P: PacketPool, const SERVICES: us
     {
         Ok(()) => {}
         Err(error) => {
-            println!("WARNING: connection rumble write failed: {:?}", error);
+            warn!("connection rumble write failed: {:?}", error);
         }
     }
 }
@@ -670,7 +667,7 @@ where
     };
     let scan_result = scanner.scan(&scan_config).await;
     if let Err(error) = &scan_result {
-        println!("BLE scan failed: {:?}", error);
+        warn!("BLE scan failed: {:?}", error);
     }
     if scan_result.is_err() {
         core::mem::drop(scan_result);
@@ -698,26 +695,26 @@ async fn wait_for_pairing<C: Controller, P: PacketPool>(
                 // not completion of SMP key distribution. Start consuming GATT
                 // traffic now so early reports cannot fill its receive queue
                 // while we wait for a later PairingComplete event.
-                println!("link ready for GATT: {:?}", security_level);
+                info!("link ready for GATT: {:?}", security_level);
                 return true;
             }
             ConnectionEvent::PairingComplete {
                 security_level,
                 bond,
             } => {
-                println!("pairing complete: {:?}", security_level);
+                info!("pairing complete: {:?}", security_level);
                 if bond.is_some() {
-                    println!("unexpected bond returned during non-bondable pairing");
+                    warn!("unexpected bond returned during non-bondable pairing");
                 }
                 return true;
             }
             ConnectionEvent::PairingFailed(error) => {
-                println!("pairing failed: {:?}; rescanning", error);
+                warn!("pairing failed: {:?}; rescanning", error);
                 connection.disconnect();
                 return false;
             }
             ConnectionEvent::Disconnected { reason } => {
-                println!(
+                warn!(
                     "controller disconnected during pairing: {:?}; rescanning",
                     reason
                 );
@@ -725,7 +722,7 @@ async fn wait_for_pairing<C: Controller, P: PacketPool>(
             }
             ConnectionEvent::RequestConnectionParams(request) => {
                 if let Err(error) = request.accept(None, stack).await {
-                    println!(
+                    warn!(
                         "connection parameter update failed: {:?}; reconnecting",
                         error
                     );
@@ -734,22 +731,22 @@ async fn wait_for_pairing<C: Controller, P: PacketPool>(
                 }
             }
             ConnectionEvent::PassKeyDisplay(passkey) => {
-                println!("pairing passkey: {}", passkey)
+                info!("pairing passkey: {}", passkey)
             }
             ConnectionEvent::PassKeyConfirm(passkey) => {
-                println!("confirming pairing passkey: {}", passkey);
+                info!("confirming pairing passkey: {}", passkey);
                 if let Err(error) = connection.pass_key_confirm() {
-                    println!("passkey confirmation failed: {:?}; reconnecting", error);
+                    warn!("passkey confirmation failed: {:?}; reconnecting", error);
                     connection.disconnect();
                     return false;
                 }
             }
             ConnectionEvent::PassKeyInput => {
-                println!("controller requested unsupported passkey input; reconnecting");
+                warn!("controller requested unsupported passkey input; reconnecting");
                 connection.disconnect();
                 return false;
             }
-            event => println!("pairing connection event: {:?}", event),
+            event => info!("pairing connection event: {:?}", event),
         }
     }
 }
@@ -769,7 +766,7 @@ impl EventHandler for XboxAdvertisementFinder<'_> {
                     kind: report.addr_kind,
                     addr: report.addr,
                 };
-                println!(
+                info!(
                     "found compatible Xbox at {} (RSSI {} dBm)",
                     address, report.rssi
                 );

@@ -7,9 +7,9 @@ use esp_hal::{
     rng::{Trng, TrngSource},
     timer::timg::TimerGroup,
 };
-use esp_println::println;
 use esp_radio::ble::controller::BleConnector;
 use esp_xbox_controller::{ControllerConfig, ControllerSelector, run};
+use log::{info, warn};
 use trouble_host::prelude::ExternalController;
 
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -36,8 +36,8 @@ async fn main(_spawner: Spawner) -> ! {
         &mut random,
         CONTROLLER,
         |notification| match notification {
-            Ok(state) => println!("controller state: {:?}", state),
-            Err(error) => println!("input report parse error: {:?}", error),
+            Ok(state) => info!("controller state: {:?}", state),
+            Err(error) => warn!("input report parse error: {:?}", error),
         },
     )
     .await

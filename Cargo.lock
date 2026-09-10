@@ -1941,6 +1941,7 @@ dependencies = [
  "esp32s31",
  "fugit",
  "instability",
+ "log",
  "nb 1.1.0",
  "paste",
  "portable-atomic",
@@ -1989,6 +1990,7 @@ dependencies = [
  "esp-sync",
  "esp-wifi-sys-esp32c3",
  "esp32c3",
+ "log",
 ]
 
 [[package]]
@@ -2028,10 +2030,17 @@ dependencies = [
  "esp-radio-rtos-driver",
  "esp-rom-sys",
  "esp-sync",
+ "esp-wifi-sys-esp32",
+ "esp-wifi-sys-esp32c2",
  "esp-wifi-sys-esp32c3",
+ "esp-wifi-sys-esp32c6",
+ "esp-wifi-sys-esp32h2",
+ "esp-wifi-sys-esp32s2",
+ "esp-wifi-sys-esp32s3",
  "esp32c3",
  "heapless 0.9.3",
  "instability",
+ "log",
  "num-derive",
  "num-traits",
  "portable-atomic",
@@ -2091,6 +2100,7 @@ dependencies = [
  "esp-radio-rtos-driver",
  "esp-rom-sys",
  "esp-sync",
+ "log",
  "portable-atomic",
  "riscv",
  "xtensa-lx",
@@ -2127,9 +2137,60 @@ dependencies = [
 ]
 
 [[package]]
+name = "esp-wifi-sys-esp32"
+version = "0.2.0"
+source = "git+https://github.com/esp-rs/esp-wifi-sys.git?rev=2ea8e3e#2ea8e3e6c2f49be41b8536e0d3b7f8058a6c1aa6"
+dependencies = [
+ "log",
+]
+
+[[package]]
+name = "esp-wifi-sys-esp32c2"
+version = "0.2.0"
+source = "git+https://github.com/esp-rs/esp-wifi-sys.git?rev=2ea8e3e#2ea8e3e6c2f49be41b8536e0d3b7f8058a6c1aa6"
+dependencies = [
+ "log",
+]
+
+[[package]]
 name = "esp-wifi-sys-esp32c3"
 version = "0.2.0"
 source = "git+https://github.com/esp-rs/esp-wifi-sys.git?rev=2ea8e3e#2ea8e3e6c2f49be41b8536e0d3b7f8058a6c1aa6"
+dependencies = [
+ "log",
+]
+
+[[package]]
+name = "esp-wifi-sys-esp32c6"
+version = "0.2.0"
+source = "git+https://github.com/esp-rs/esp-wifi-sys.git?rev=2ea8e3e#2ea8e3e6c2f49be41b8536e0d3b7f8058a6c1aa6"
+dependencies = [
+ "log",
+]
+
+[[package]]
+name = "esp-wifi-sys-esp32h2"
+version = "0.2.0"
+source = "git+https://github.com/esp-rs/esp-wifi-sys.git?rev=2ea8e3e#2ea8e3e6c2f49be41b8536e0d3b7f8058a6c1aa6"
+dependencies = [
+ "log",
+]
+
+[[package]]
+name = "esp-wifi-sys-esp32s2"
+version = "0.2.0"
+source = "git+https://github.com/esp-rs/esp-wifi-sys.git?rev=2ea8e3e#2ea8e3e6c2f49be41b8536e0d3b7f8058a6c1aa6"
+dependencies = [
+ "log",
+]
+
+[[package]]
+name = "esp-wifi-sys-esp32s3"
+version = "0.2.0"
+source = "git+https://github.com/esp-rs/esp-wifi-sys.git?rev=2ea8e3e#2ea8e3e6c2f49be41b8536e0d3b7f8058a6c1aa6"
+dependencies = [
+ "log",
+]
 
 [[package]]
 name = "esp-xbox-controller"
@@ -2141,6 +2202,7 @@ dependencies = [
  "embassy-time",
  "esp-hal",
  "esp-println",
+ "log",
  "trouble-host",
  "xbox-controller-core",
 ]
@@ -2167,6 +2229,7 @@ dependencies = [
  "esp-radio",
  "esp-rtos",
  "esp-xbox-controller",
+ "log",
  "trouble-host",
 ]
 

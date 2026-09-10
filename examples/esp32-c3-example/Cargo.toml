@@ -20,12 +20,14 @@ esp-println = { version = "0.18.0", features = ["esp32c3", "log-04"] }
 # TODO: Update esp-radio to released version when compatible with esp-hal 1.2.1
 esp-radio = { git = "https://github.com/esp-rs/esp-hal", rev = "dbd951f78c1276461ea3050c2ba71f552a3508ef", features = [
     "esp32c3",
+    "log-04",
     "ble",
     "esp-alloc",
     "unstable",
 ] }
 esp-rtos = { version = "0.4.0", features = [
     "esp32c3",
+    "log-04",
     "embassy",
     "esp-radio",
     "esp-alloc",
@@ -37,4 +39,5 @@ trouble-host = { git = "https://github.com/embassy-rs/trouble", rev = "290ab2f45
     "scan",
     "security",
 ] }
+log = { version = "0.4.34" }
 esp-xbox-controller = { path = "../..", features = ["esp32c3"] }
