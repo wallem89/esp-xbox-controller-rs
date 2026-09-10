@@ -4,13 +4,7 @@ All notable changes to `esp-xbox-controller` are documented here.
 
 ## [Unreleased]
 
-### Changed
-
-- Breaking: `ControllerConfig::new` requires a third `supervision_timeout`
-  argument. Pass `Duration::from_millis(500)` to preserve the previous default;
-  the `with_supervision_timeout` builder has been removed.
-
-## [0.3.0] - 2026-09-09
+## [0.3.0] - 2026-09-10
 
 ### Added
 
@@ -22,6 +16,9 @@ All notable changes to `esp-xbox-controller` are documented here.
 ### Changed
 
 - Support for esp-hal 1.2.1
+- Breaking: `ControllerConfig::new` requires a third `supervision_timeout`
+  argument. Pass `Duration::from_millis(500)` to preserve the previous default;
+  the `with_supervision_timeout` builder has been removed.
 
 ## [0.2.0] - 2026-08-21
 
